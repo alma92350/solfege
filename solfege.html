@@ -1,0 +1,1502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solfege Trainer</title>
+    <style>
+:root {
+    --bg: #15181d;
+    --bg-elev: #1e232b;
+    --bg-staff: #f5f1e6;
+    --fg: #e8eaee;
+    --fg-muted: #9aa0a8;
+    --accent: #4ea1ff;
+    --accent-hot: #ffb24e;
+    --good: #5dd29a;
+    --bad: #ff6b6b;
+    --staff-ink: #1a1a1a;
+    --judgment: #d33;
+    --radius: 10px;
+    --pad: 12px;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--fg);
+    font-family: var(--font); overflow: hidden;
+}
+body { display: flex; flex-direction: column; }
+.app-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--pad) calc(var(--pad) * 2);
+    background: var(--bg-elev); border-bottom: 1px solid #2a2f37;
+}
+.app-header h1 { font-size: 1.2rem; margin: 0; letter-spacing: 0.04em; }
+.settings-toggle {
+    background: transparent; color: var(--fg); border: 1px solid #3a414c;
+    border-radius: var(--radius); padding: 8px 16px; cursor: pointer; font-size: 0.95rem;
+}
+.settings-toggle:hover { background: #2a313b; }
+.app-main { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: var(--pad); gap: var(--pad); }
+.staff-container {
+    position: relative; flex: 1 1 auto; min-height: 240px;
+    background: var(--bg-staff); border-radius: var(--radius); overflow: hidden;
+    box-shadow: inset 0 0 0 1px #d6d0bf;
+}
+.staff-svg { display: block; width: 100%; height: 100%; }
+.hud {
+    flex: 0 0 auto; display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--pad);
+    background: var(--bg-elev); border-radius: var(--radius); padding: var(--pad);
+}
+.hud-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.hud-label { font-size: 0.72rem; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.hud-value { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg); }
+.solfege-buttons { flex: 0 0 auto; display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--pad); }
+.solfege-btn {
+    font-family: var(--font); font-size: clamp(1.1rem, 2.4vw, 1.6rem); font-weight: 700;
+    letter-spacing: 0.05em; padding: 22px 0;
+    background: var(--bg-elev); color: var(--fg); border: 1px solid #3a414c;
+    border-radius: var(--radius); cursor: pointer;
+    transition: transform 60ms ease, background 120ms ease, border-color 120ms ease;
+    user-select: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+}
+.solfege-btn:hover { background: #2a313b; border-color: var(--accent); }
+.solfege-btn:active { transform: translateY(1px); }
+.solfege-name { font-size: inherit; font-weight: 700; letter-spacing: 0.06em; }
+.solfege-key {
+    font-size: 0.7rem; font-weight: 500; color: var(--fg-muted);
+    font-variant-numeric: tabular-nums; letter-spacing: 0.08em;
+}
+.solfege-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.solfege-btn.pressed { transform: translateY(2px); background: #2a313b; border-color: var(--accent); }
+.solfege-btn.flash-good { animation: btn-flash-good 260ms ease-out; }
+.solfege-btn.flash-bad  { animation: btn-flash-bad  260ms ease-out; }
+@keyframes btn-flash-good {
+    0%   { background: var(--good); color: #0b1410; border-color: var(--good); transform: scale(1.04); }
+    100% { background: var(--bg-elev); color: var(--fg); border-color: #3a414c; transform: scale(1); }
+}
+@keyframes btn-flash-bad {
+    0%   { background: var(--bad); color: #2a0a0a; border-color: var(--bad); transform: scale(1.02); }
+    100% { background: var(--bg-elev); color: var(--fg); border-color: #3a414c; transform: scale(1); }
+}
+.settings-panel {
+    position: fixed; top: 0; right: 0; width: min(360px, 90vw); height: 100vh;
+    background: var(--bg-elev); border-left: 1px solid #2a2f37;
+    padding: calc(var(--pad) * 2); overflow-y: auto; z-index: 10;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.4);
+}
+.settings-panel[hidden] { display: none; }
+.settings-header { display: flex; align-items: center; justify-content: space-between; }
+.settings-close {
+    background: transparent; border: none; color: var(--fg-muted);
+    font-size: 1.6rem; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+.settings-close:hover { color: var(--fg); }
+.settings-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 9;
+}
+.settings-backdrop[hidden] { display: none; }
+.settings-panel h2 { margin-top: 0; font-size: 1.1rem; letter-spacing: 0.04em; }
+.settings-panel fieldset {
+    border: 1px solid #3a414c; border-radius: var(--radius);
+    margin-bottom: var(--pad); padding: var(--pad);
+}
+.settings-panel legend {
+    color: var(--fg-muted); font-size: 0.8rem;
+    text-transform: uppercase; letter-spacing: 0.08em; padding: 0 6px;
+}
+.settings-panel label { display: block; padding: 6px 0; cursor: pointer; }
+.settings-panel button {
+    background: var(--bg); color: var(--fg); border: 1px solid #3a414c;
+    border-radius: var(--radius); padding: 10px 16px; margin-right: 6px; cursor: pointer;
+}
+.settings-panel button:hover { border-color: var(--accent); }
+.settings-panel input[type="range"] { width: 100%; accent-color: var(--accent); }
+.settings-panel output {
+    display: inline-block; font-variant-numeric: tabular-nums;
+    color: var(--accent-hot); font-weight: 600; margin-left: 8px;
+}
+.settings-panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-panel button:disabled { opacity: 0.5; cursor: default; }
+#btn-reset-highscore { background: #3a1a1a; border-color: #5a2a2a; }
+#btn-reset-highscore:hover { border-color: var(--bad); }
+.staff-line     { stroke: var(--staff-ink); stroke-width: 1.4; }
+.staff-clef     { fill: var(--staff-ink); color: var(--staff-ink); }
+.judgment-line  { stroke: var(--judgment); stroke-width: 2; stroke-dasharray: 6 4; opacity: 0.85; }
+.note-head      { fill: var(--staff-ink); }
+.note-stem      { stroke: var(--staff-ink); stroke-width: 1.6; }
+.note-accidental{ fill: var(--staff-ink); font-family: serif; font-size: 22px; }
+.staff-static  { pointer-events: none; }
+.staff-notes   { pointer-events: none; }
+.note          { transition: opacity 180ms ease; }
+.note .note-head, .note .note-stem, .note .note-accidental {
+    transition: fill 120ms ease, stroke 120ms ease;
+}
+.note.hit  .note-head { fill: var(--good); }
+.note.hit  .note-stem { stroke: var(--good); }
+.note.hit  .note-accidental { fill: var(--good); }
+.note.miss .note-head { fill: var(--bad); }
+.note.miss .note-stem { stroke: var(--bad); }
+.note.miss .note-accidental { fill: var(--bad); }
+.note.hit, .note.miss { animation: note-flash 320ms ease-out; }
+@keyframes note-flash {
+    0%   { opacity: 1; }
+    40%  { opacity: 1; }
+    100% { opacity: 0.15; }
+}
+.pause-overlay {
+    position: absolute; inset: 0;
+    background: rgba(20, 24, 30, 0.78); color: var(--fg);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 5;
+    transition: opacity 180ms ease, visibility 180ms ease;
+    backdrop-filter: blur(2px);
+}
+.pause-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.pause-overlay-inner { text-align: center; user-select: none; }
+.pause-overlay-icon { font-size: 4.5rem; line-height: 1; color: var(--accent); margin-bottom: 12px; }
+.pause-overlay-text { font-size: 1.6rem; font-weight: 600; letter-spacing: 0.04em; }
+.pause-overlay-hint { font-size: 0.9rem; color: var(--fg-muted); margin-top: 6px; }
+.pause-overlay:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+@media (max-width: 720px) {
+    .hud { grid-template-columns: repeat(3, 1fr); }
+    .solfege-buttons { grid-template-columns: repeat(12, 1fr); gap: 6px; }
+    .solfege-btn:nth-child(-n+4) { grid-column: span 3; }
+    .solfege-btn:nth-child(n+5)  { grid-column: span 4; }
+    .solfege-btn { padding: 14px 0; }
+    .solfege-name { font-size: 1rem; }
+    .solfege-key  { font-size: 0.6rem; }
+}
+
+/* ===== piano keyboard mode ===== */
+.piano-keyboard {
+    position: relative;
+    flex: 0 0 auto;
+    height: 160px;
+    background: #1e232b;
+    border: 1px solid #2a2f37;
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    user-select: none;
+}
+.piano-keyboard[hidden] { display: none; }
+.piano-key {
+    font-family: var(--font);
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    transition: filter 80ms ease, transform 80ms ease;
+}
+.piano-key:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 3; }
+.piano-key.white {
+    position: relative;
+    flex: 1 1 0;
+    background: #f6f1e3;
+    color: #1a1a1a;
+    border-right: 1px solid #c9c3b1;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    justify-content: flex-start;
+    padding-bottom: 10px;
+    gap: 2px;
+}
+.piano-key.white:last-of-type { border-right: none; }
+.piano-key.white .piano-label { font-size: 1rem; font-weight: 700; letter-spacing: 0.04em; }
+.piano-key.white .piano-sub   { font-size: 0.7rem; color: #777; margin-bottom: 2px; font-weight: 500; }
+.piano-key.white:hover { background: #ebe5d2; }
+.piano-key.white.pressed { background: #d9d2bc; transform: translateY(1px); }
+.piano-key.black {
+    position: absolute;
+    top: 0;
+    width: 9%;
+    height: 62%;
+    background: #16181c;
+    color: #e8eaee;
+    border-radius: 0 0 5px 5px;
+    z-index: 2;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 8px;
+    box-shadow: 0 2px 0 #000;
+}
+.piano-key.black .piano-sub { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.04em; }
+.piano-key.black:hover { background: #2a2d33; }
+.piano-key.black.pressed { background: #3a3d44; transform: translateY(1px); box-shadow: 0 1px 0 #000; }
+/* Centered on each white-key boundary; -4.5% nudges by half the black-key width */
+.piano-key.bk-1 { left: calc(100% / 7 - 4.5%); }   /* C#  → DO  */
+.piano-key.bk-2 { left: calc(200% / 7 - 4.5%); }   /* D#  → RE  */
+.piano-key.bk-3 { left: calc(400% / 7 - 4.5%); }   /* F#  → FA  */
+.piano-key.bk-4 { left: calc(500% / 7 - 4.5%); }   /* G#  → SOL */
+.piano-key.bk-5 { left: calc(600% / 7 - 4.5%); }   /* A#/Bb → SI */
+
+.piano-key.flash-good { animation: piano-flash-good 280ms ease-out; }
+.piano-key.flash-bad  { animation: piano-flash-bad  280ms ease-out; }
+@keyframes piano-flash-good {
+    0%   { background: var(--good); color: #0b1410; }
+    100% { }
+}
+@keyframes piano-flash-bad {
+    0%   { background: var(--bad); color: #2a0a0a; }
+    100% { }
+}
+
+@media (max-width: 720px) {
+    .piano-keyboard { height: 130px; }
+    .piano-key.white .piano-label { font-size: 0.9rem; }
+    .piano-key.white .piano-sub   { font-size: 0.62rem; }
+    .piano-key.black .piano-sub   { font-size: 0.55rem; }
+}
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Solfege Trainer</h1>
+        <button id="settings-toggle" class="settings-toggle" aria-label="Toggle settings" aria-controls="settings-panel" aria-expanded="false">Settings</button>
+    </header>
+
+    <main class="app-main">
+        <section id="staff-container" class="staff-container" aria-label="Musical staff">
+            <svg id="staff-svg" class="staff-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"></svg>
+            <div id="pause-overlay" class="pause-overlay" role="button" tabindex="0" aria-label="Paused — click to start" aria-hidden="true">
+                <div class="pause-overlay-inner">
+                    <div class="pause-overlay-icon">&#9654;</div>
+                    <div class="pause-overlay-text">Click to Start</div>
+                    <div class="pause-overlay-hint">(Space toggles pause)</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="hud" class="hud" aria-label="Game status">
+            <div class="hud-cell"><span class="hud-label">Score</span><span id="hud-score" class="hud-value">0</span></div>
+            <div class="hud-cell"><span class="hud-label">Streak</span><span id="hud-streak" class="hud-value">0</span></div>
+            <div class="hud-cell"><span class="hud-label">Accuracy</span><span id="hud-accuracy" class="hud-value">--%</span></div>
+            <div class="hud-cell"><span class="hud-label">Speed</span><span id="hud-speed" class="hud-value">--</span></div>
+            <div class="hud-cell"><span class="hud-label">Tier</span><span id="hud-tier" class="hud-value">1</span></div>
+            <div class="hud-cell"><span class="hud-label">Best</span><span id="hud-highscore" class="hud-value">0</span></div>
+        </section>
+
+        <section id="solfege-buttons" class="solfege-buttons" aria-label="Solfege answer buttons">
+            <button class="solfege-btn" data-solfege="DO">DO</button>
+            <button class="solfege-btn" data-solfege="RE">RE</button>
+            <button class="solfege-btn" data-solfege="MI">MI</button>
+            <button class="solfege-btn" data-solfege="FA">FA</button>
+            <button class="solfege-btn" data-solfege="SOL">SOL</button>
+            <button class="solfege-btn" data-solfege="LA">LA</button>
+            <button class="solfege-btn" data-solfege="SI">SI</button>
+        </section>
+
+        <section id="piano-keyboard" class="piano-keyboard" aria-label="Piano keyboard" hidden>
+            <button class="piano-key white" data-solfege="DO"  aria-label="DO (C)"><span class="piano-label">DO</span><span class="piano-sub">C</span></button>
+            <button class="piano-key white" data-solfege="RE"  aria-label="RE (D)"><span class="piano-label">RE</span><span class="piano-sub">D</span></button>
+            <button class="piano-key white" data-solfege="MI"  aria-label="MI (E)"><span class="piano-label">MI</span><span class="piano-sub">E</span></button>
+            <button class="piano-key white" data-solfege="FA"  aria-label="FA (F)"><span class="piano-label">FA</span><span class="piano-sub">F</span></button>
+            <button class="piano-key white" data-solfege="SOL" aria-label="SOL (G)"><span class="piano-label">SOL</span><span class="piano-sub">G</span></button>
+            <button class="piano-key white" data-solfege="LA"  aria-label="LA (A)"><span class="piano-label">LA</span><span class="piano-sub">A</span></button>
+            <button class="piano-key white" data-solfege="SI"  aria-label="SI (B)"><span class="piano-label">SI</span><span class="piano-sub">B</span></button>
+            <button class="piano-key black bk-1" data-solfege="DO"  aria-label="DO sharp (C#)"><span class="piano-sub">DO♯</span></button>
+            <button class="piano-key black bk-2" data-solfege="RE"  aria-label="RE sharp (D#)"><span class="piano-sub">RE♯</span></button>
+            <button class="piano-key black bk-3" data-solfege="FA"  aria-label="FA sharp (F#)"><span class="piano-sub">FA♯</span></button>
+            <button class="piano-key black bk-4" data-solfege="SOL" aria-label="SOL sharp (G#)"><span class="piano-sub">SOL♯</span></button>
+            <button class="piano-key black bk-5" data-solfege="SI"  aria-label="SI flat (B♭)"><span class="piano-sub">SI♭</span></button>
+        </section>
+    </main>
+
+    <div id="settings-backdrop" class="settings-backdrop" hidden></div>
+    <aside id="settings-panel" class="settings-panel" hidden>
+        <div class="settings-header">
+            <h2>Settings</h2>
+            <button id="settings-close" class="settings-close" type="button" aria-label="Close settings">&times;</button>
+        </div>
+        <fieldset>
+            <legend>Clef</legend>
+            <label><input type="radio" name="clef" value="treble" checked> Clef de Sol (Treble)</label>
+            <label><input type="radio" name="clef" value="bass"> Clef de Fa (Bass)</label>
+        </fieldset>
+        <fieldset>
+            <legend>Answer Layout</legend>
+            <label><input type="radio" name="answer-layout" value="buttons" checked> Solfège Buttons</label>
+            <label><input type="radio" name="answer-layout" value="piano"> Piano Keyboard</label>
+        </fieldset>
+
+        <fieldset>
+            <legend>Starting Difficulty Tier</legend>
+            <label><input type="range" id="start-tier" min="1" max="4" value="1" step="1"></label>
+            <output id="start-tier-output">1</output>
+        </fieldset>
+        <fieldset>
+            <legend>Game</legend>
+            <button id="btn-start" type="button">Start</button>
+            <button id="btn-pause" type="button">Pause</button>
+            <button id="btn-reset" type="button">Reset</button>
+        </fieldset>
+        <fieldset>
+            <legend>High Score</legend>
+            <button id="btn-reset-highscore" type="button">Reset High Score</button>
+        </fieldset>
+        <fieldset>
+            <legend>Training</legend>
+            <button id="btn-reset-mastery" type="button">Reset Training Memory</button>
+        </fieldset>
+    </aside>
+
+    <script>
+/*
+ * Solfege Trainer - standalone single-file build.
+ * Bundles the 5 ES modules (settings, notes, staff, engine, ui) as IIFEs
+ * so the app runs from file:// without a web server. The modular source
+ * under js/ remains the source of truth for development; this file is the
+ * built artifact.
+ */
+(function () {
+    "use strict";
+
+    // ========================================================================
+    // settings module
+    // ========================================================================
+    const settings = (function () {
+        const SETTINGS_KEY = "solfege.settings.v1";
+        const DEFAULTS = Object.freeze({ clef: "treble", startTier: 1, answerLayout: "buttons" });
+        let current = null;
+
+        function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+        function sanitize(raw) {
+            const out = clone(DEFAULTS);
+            if (raw && typeof raw === "object") {
+                if (raw.clef === "treble" || raw.clef === "bass") out.clef = raw.clef;
+                const t = parseInt(raw.startTier, 10);
+                if (Number.isFinite(t) && t >= 1) out.startTier = t;
+                if (raw.answerLayout === "buttons" || raw.answerLayout === "piano") {
+                    out.answerLayout = raw.answerLayout;
+                }
+            }
+            return out;
+        }
+
+        function load() {
+            if (current) return clone(current);
+            let raw = null;
+            try {
+                const s = localStorage.getItem(SETTINGS_KEY);
+                if (s) raw = JSON.parse(s);
+            } catch (_) { raw = null; }
+            current = sanitize(raw);
+            return clone(current);
+        }
+
+        function get() {
+            if (!current) return load();
+            return clone(current);
+        }
+
+        function update(patch) {
+            if (!current) load();
+            const merged = sanitize({ ...current, ...(patch || {}) });
+            current = merged;
+            save();
+            return clone(current);
+        }
+
+        function save() {
+            if (!current) return;
+            try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(current)); }
+            catch (_) { /* localStorage disabled / quota */ }
+        }
+
+        return { load, get, update, save, SETTINGS_KEY, DEFAULTS };
+    })();
+
+    // ========================================================================
+    // notes module
+    // ========================================================================
+    const notes = (function () {
+        const SOLFEGE_ORDER = ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"];
+        const PC_TO_SOLFEGE = [
+            "DO", "DO", "RE", "RE", "MI", "FA", "FA", "SOL", "SOL", "LA", "LA", "SI",
+        ];
+        const NATURAL_PCS = new Set([0, 2, 4, 5, 7, 9, 11]);
+        const FLAT_PCS = new Set([10]);
+
+        function midiToSolfege(midi) {
+            const pc = ((midi % 12) + 12) % 12;
+            if (pc === 10) return "SI";
+            return PC_TO_SOLFEGE[pc];
+        }
+
+        function midiToAccidental(midi) {
+            const pc = ((midi % 12) + 12) % 12;
+            if (NATURAL_PCS.has(pc)) return "";
+            if (FLAT_PCS.has(pc)) return "b";
+            return "#";
+        }
+
+        function midiToStaffStep(midi, clef) {
+            const LETTER_IDX = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 6, 6];
+            const pc = ((midi % 12) + 12) % 12;
+            const octave = Math.floor(midi / 12) - 1;
+            const letterIdx = LETTER_IDX[pc];
+            const diatonic = octave * 7 + letterIdx;
+            const middle = clef === "bass" ? 22 : 34;
+            return diatonic - middle;
+        }
+
+        const C_MAJOR_PCS = [0, 2, 4, 5, 7, 9, 11];
+        function isInCMajor(midi) {
+            const pc = ((midi % 12) + 12) % 12;
+            return C_MAJOR_PCS.includes(pc);
+        }
+
+        function buildPool(tier, clef) {
+            const trebleCenter = [60, 72];
+            const bassCenter = [41, 53];
+            const center = clef === "bass" ? bassCenter : trebleCenter;
+            const centerLo = center[0], centerHi = center[1];
+
+            let lo, hi, allowChromatic = false;
+            let allowedAccidentalPcs = new Set();
+
+            if (tier <= 1) { lo = centerLo; hi = centerHi; }
+            else if (tier === 2) { lo = centerLo - 12; hi = centerHi + 12; }
+            else if (tier === 3) {
+                lo = centerLo - 12; hi = centerHi + 12;
+                allowedAccidentalPcs = new Set([6, 10]);
+            } else {
+                lo = centerLo - 14; hi = centerHi + 14;
+                allowChromatic = true;
+            }
+
+            const pool = [];
+            for (let m = lo; m <= hi; m++) {
+                if (allowChromatic) pool.push(m);
+                else if (isInCMajor(m)) pool.push(m);
+                else if (allowedAccidentalPcs.size > 0) {
+                    const pc = ((m % 12) + 12) % 12;
+                    if (allowedAccidentalPcs.has(pc)) pool.push(m);
+                }
+            }
+            return pool;
+        }
+
+        function maxIntervalSemitones(tier) {
+            if (tier <= 1) return 4;
+            if (tier === 2) return 7;
+            if (tier === 3) return 12;
+            return 17;
+        }
+
+        function buildNote(midi, clef) {
+            return {
+                id: 0, midi,
+                solfege: midiToSolfege(midi),
+                accidental: midiToAccidental(midi),
+                staffStep: midiToStaffStep(midi, clef),
+                x: 0, state: "pending",
+            };
+        }
+
+        function generateNote(opts) {
+            const tier = opts && opts.tier;
+            const clef = opts && opts.clef;
+            const previous = opts && opts.previous;
+            const radius = opts && typeof opts.radius === "number" ? opts.radius : null;
+            const weightFn = opts && typeof opts.weightFn === "function" ? opts.weightFn : null;
+            const t = Math.max(1, Math.floor(tier || 1));
+            const pool = buildPool(t, clef);
+            if (pool.length === 0) return buildNote(clef === "bass" ? 41 : 60, clef);
+
+            const maxInt = maxIntervalSemitones(t);
+            let candidates;
+            if (previous && typeof previous.midi === "number") {
+                candidates = pool.filter(m =>
+                    m !== previous.midi && Math.abs(m - previous.midi) <= maxInt
+                );
+                if (candidates.length === 0) candidates = pool.filter(m => m !== previous.midi);
+                if (candidates.length === 0) candidates = pool;
+            } else {
+                candidates = pool;
+            }
+
+            // Vertical-window gate: keep only positions within `radius` of the
+            // staff center. Falls back to the full candidate list if empty.
+            if (radius != null) {
+                const within = candidates.filter(m => Math.abs(midiToStaffStep(m, clef)) <= radius);
+                if (within.length > 0) candidates = within;
+            }
+
+            let pick;
+            if (weightFn) {
+                const prevStep = previous && typeof previous.staffStep === "number"
+                    ? previous.staffStep : null;
+                const weights = candidates.map(m => {
+                    const w = weightFn(midiToStaffStep(m, clef), prevStep);
+                    return w > 0 ? w : 0.0001;
+                });
+                let total = 0;
+                for (let i = 0; i < weights.length; i++) total += weights[i];
+                let r = Math.random() * total;
+                pick = candidates[candidates.length - 1];
+                for (let i = 0; i < candidates.length; i++) {
+                    r -= weights[i];
+                    if (r <= 0) { pick = candidates[i]; break; }
+                }
+            } else {
+                pick = candidates[Math.floor(Math.random() * candidates.length)];
+            }
+            return buildNote(pick, clef);
+        }
+
+        function poolSteps(tier, clef) {
+            const t = Math.max(1, Math.floor(tier || 1));
+            const seen = {};
+            const out = [];
+            buildPool(t, clef).forEach((m) => {
+                const s = midiToStaffStep(m, clef);
+                if (!seen[s]) { seen[s] = true; out.push(s); }
+            });
+            return out;
+        }
+
+        return { SOLFEGE_ORDER, midiToSolfege, midiToAccidental, midiToStaffStep, generateNote, poolSteps };
+    })();
+
+    // ========================================================================
+    // mastery module (hidden per-note / per-sequence training score)
+    // ========================================================================
+    const mastery = (function () {
+        const KEY = "solfege.mastery.v1";
+        const ALPHA = 0.25;          // EMA learning rate
+        const EPS = 0.15;            // floor weight so mastered notes still appear
+        const EXPAND_THRESH = 0.8;   // in-window mastery needed to widen the range
+        const R_START = 2;           // initial vertical half-window (steps from center)
+        const R_MAX = 10;
+        const CENTER = 0;            // staffStep 0 = middle line
+
+        let data = null;
+
+        function freshClef() {
+            return { notes: {}, seq: {}, radius: R_START };
+        }
+
+        function load() {
+            if (data) return;
+            let raw = null;
+            try {
+                const s = localStorage.getItem(KEY);
+                if (s) raw = JSON.parse(s);
+            } catch (_) { raw = null; }
+            data = { treble: freshClef(), bass: freshClef() };
+            if (raw && typeof raw === "object") {
+                ["treble", "bass"].forEach((c) => {
+                    const src = raw[c];
+                    if (src && typeof src === "object") {
+                        if (src.notes && typeof src.notes === "object") data[c].notes = src.notes;
+                        if (src.seq && typeof src.seq === "object") data[c].seq = src.seq;
+                        const r = parseInt(src.radius, 10);
+                        if (Number.isFinite(r) && r >= R_START) data[c].radius = Math.min(R_MAX, r);
+                    }
+                });
+            }
+        }
+
+        function save() {
+            if (!data) return;
+            try { localStorage.setItem(KEY, JSON.stringify(data)); }
+            catch (_) { /* localStorage disabled / quota */ }
+        }
+
+        function forClef(clef) {
+            if (!data) load();
+            return data[clef === "bass" ? "bass" : "treble"];
+        }
+
+        function getRadius(clef) {
+            return forClef(clef).radius;
+        }
+
+        function noteM(d, step) {
+            const v = d.notes[step];
+            return typeof v === "number" ? v : 0;
+        }
+
+        function seqM(d, prev, cur) {
+            const v = d.seq[prev + ">>" + cur];
+            return typeof v === "number" ? v : 0;
+        }
+
+        // Selection weight: low mastery -> high weight (appears more often).
+        function weightFor(clef, curStep, prevStep) {
+            const d = forClef(clef);
+            const noteW = (1 - noteM(d, curStep)) + EPS;
+            if (prevStep == null) return noteW;
+            const seqW = (1 - seqM(d, prevStep, curStep)) + EPS;
+            return 0.5 * noteW + 0.5 * seqW;
+        }
+
+        function bump(cur, hit) {
+            // EMA toward 1 on hit, toward 0 on miss.
+            return hit ? cur + ALPHA * (1 - cur) : cur * (1 - ALPHA);
+        }
+
+        function recordOutcome(clef, curStep, prevStep, hit) {
+            const d = forClef(clef);
+            d.notes[curStep] = bump(noteM(d, curStep), hit);
+            if (prevStep != null) {
+                const k = prevStep + ">>" + curStep;
+                d.seq[k] = bump(seqM(d, prevStep, curStep), hit);
+            }
+            save();
+        }
+
+        // Widen the vertical window once every in-window step that actually
+        // exists in the current tier pool is mastered. Unseen in-window steps
+        // (mastery 0) block expansion until they are seen + mastered.
+        function maybeExpand(clef, poolSteps) {
+            const d = forClef(clef);
+            if (d.radius >= R_MAX) return;
+            let sawAny = false;
+            for (let i = 0; i < poolSteps.length; i++) {
+                const s = poolSteps[i];
+                if (Math.abs(s - CENTER) > d.radius) continue;
+                sawAny = true;
+                if (noteM(d, s) < EXPAND_THRESH) return;
+            }
+            if (sawAny) { d.radius = Math.min(R_MAX, d.radius + 1); save(); }
+        }
+
+        function reset() {
+            data = { treble: freshClef(), bass: freshClef() };
+            save();
+        }
+
+        return { load, save, getRadius, weightFor, recordOutcome, maybeExpand, reset };
+    })();
+
+    // ========================================================================
+    // staff module (SVG renderer)
+    // ========================================================================
+    const staff = (function () {
+        const JUDGMENT_X = 140;
+        const JUDGMENT_TOLERANCE = 40;
+        const SVG_NS = "http://www.w3.org/2000/svg";
+
+        const state = {
+            svg: null, clef: "treble",
+            width: 0, height: 0, staffLineGap: 12, middleY: 0, spawnX: 0,
+            staticLayer: null, notesLayer: null,
+            noteEls: new Map(),
+        };
+
+        function el(name, attrs) {
+            const node = document.createElementNS(SVG_NS, name);
+            if (attrs) for (const k in attrs) node.setAttribute(k, String(attrs[k]));
+            return node;
+        }
+
+        function yForStep(step) {
+            return state.middleY - step * (state.staffLineGap / 2);
+        }
+
+        function computeLayout() {
+            const rect = state.svg.getBoundingClientRect();
+            const w = Math.max(1, Math.floor(rect.width));
+            const h = Math.max(1, Math.floor(rect.height));
+            state.width = w; state.height = h;
+            state.svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+            const targetGap = Math.round(h * 0.06);
+            state.staffLineGap = Math.min(16, Math.max(10, targetGap));
+            state.middleY = Math.round(h / 2);
+            state.spawnX = w - 20;
+        }
+
+        function clearLayer(layer) {
+            while (layer.firstChild) layer.removeChild(layer.firstChild);
+        }
+
+        const TREBLE_PATH =
+            "M 5 -45 C -8 -30 -8 -10 6 -2 C 22 8 26 30 14 42 C 6 50 -6 48 -10 38 " +
+            "C -13 30 -7 22 2 22 C 12 22 18 30 16 40 C 14 48 8 52 0 52 " +
+            "M 6 -2 C -10 8 -10 30 6 38 " +
+            "M 6 -45 L 6 55 " +
+            "M 6 55 C 6 60 2 62 -1 60";
+
+        const BASS_PATH =
+            "M -8 -10 C 0 -16 14 -14 18 -4 C 22 6 18 18 8 22 C 0 25 -6 22 -10 16";
+
+        function makeClef(clef) {
+            const g = el("g", { class: "staff-clef" });
+            if (clef === "treble") {
+                const cy = yForStep(-2);
+                const scale = (state.staffLineGap * 4) / 80;
+                const cx = 28;
+                g.appendChild(el("path", {
+                    d: TREBLE_PATH,
+                    transform: "translate(" + cx + " " + cy + ") scale(" + scale + ")",
+                    fill: "currentColor", stroke: "currentColor",
+                    "stroke-width": 2.2, "stroke-linecap": "round",
+                    "stroke-linejoin": "round", "fill-rule": "nonzero",
+                    "fill-opacity": 0.0,
+                }));
+            } else {
+                const cy = yForStep(2);
+                const scale = (state.staffLineGap * 2.2) / 30;
+                const cx = 22;
+                g.appendChild(el("path", {
+                    d: BASS_PATH,
+                    transform: "translate(" + cx + " " + cy + ") scale(" + scale + ")",
+                    fill: "currentColor", stroke: "currentColor",
+                    "stroke-width": 3, "stroke-linecap": "round",
+                    "stroke-linejoin": "round", "fill-opacity": 0.0,
+                }));
+                const dotR = Math.max(1.6, state.staffLineGap * 0.18);
+                const dotX = cx + scale * 26;
+                g.appendChild(el("circle", { cx: dotX, cy: cy - state.staffLineGap / 2, r: dotR, fill: "currentColor" }));
+                g.appendChild(el("circle", { cx: dotX, cy: cy + state.staffLineGap / 2, r: dotR, fill: "currentColor" }));
+            }
+            return g;
+        }
+
+        function drawStatic() {
+            clearLayer(state.staticLayer);
+            const xLeft = 8;
+            const xRight = state.width - 4;
+            for (let step = -4; step <= 4; step += 2) {
+                const y = yForStep(step);
+                state.staticLayer.appendChild(el("line", {
+                    class: "staff-line", x1: xLeft, x2: xRight, y1: y, y2: y,
+                }));
+            }
+            state.staticLayer.appendChild(makeClef(state.clef));
+            const topY = yForStep(8);
+            const botY = yForStep(-8);
+            state.staticLayer.appendChild(el("line", {
+                class: "judgment-line", x1: JUDGMENT_X, x2: JUDGMENT_X, y1: topY, y2: botY,
+            }));
+        }
+
+        function makeNoteEl(note) {
+            const g = el("g", { class: "note", "data-note-id": String(note.id) });
+            const step = note.staffStep;
+            if (Math.abs(step) > 4) {
+                const startSign = step > 0 ? 1 : -1;
+                const headW = state.staffLineGap * 1.1;
+                for (let s = 6; s <= Math.abs(step); s += 2) {
+                    const ly = yForStep(startSign * s);
+                    g.appendChild(el("line", {
+                        class: "staff-line",
+                        x1: -headW / 1.4, x2: headW / 1.4, y1: ly, y2: ly,
+                    }));
+                }
+            }
+            const rx = state.staffLineGap * 0.66;
+            const ry = state.staffLineGap * 0.5;
+            const noteY = yForStep(step);
+            g.appendChild(el("ellipse", {
+                class: "note-head", cx: 0, cy: noteY, rx: rx, ry: ry,
+                transform: "rotate(-20 0 " + noteY + ")",
+            }));
+            const stemLen = state.staffLineGap * 3.2;
+            if (step <= 0) {
+                const sx = rx * 0.95;
+                g.appendChild(el("line", {
+                    class: "note-stem", x1: sx, y1: noteY, x2: sx, y2: noteY - stemLen,
+                }));
+            } else {
+                const sx = -rx * 0.95;
+                g.appendChild(el("line", {
+                    class: "note-stem", x1: sx, y1: noteY, x2: sx, y2: noteY + stemLen,
+                }));
+            }
+            if (note.accidental === "#" || note.accidental === "b" || note.accidental === "natural") {
+                const sym = note.accidental === "#" ? "♯"
+                          : note.accidental === "b" ? "♭"
+                          : "♮";
+                const ax = -rx - state.staffLineGap * 0.55;
+                const t = el("text", {
+                    class: "note-accidental", x: ax, y: noteY + state.staffLineGap * 0.32,
+                    "text-anchor": "middle",
+                });
+                t.textContent = sym;
+                g.appendChild(t);
+            }
+            return g;
+        }
+
+        function applyStateClass(gEl, note) {
+            gEl.classList.remove("hit", "miss");
+            if (note.state === "judged-hit") gEl.classList.add("hit");
+            else if (note.state === "judged-miss" || note.state === "expired") gEl.classList.add("miss");
+        }
+
+        function init(opts) {
+            const svg = opts && opts.svg;
+            const clef = opts && opts.clef;
+            if (!svg) throw new Error("staff.init: svg element required");
+            state.svg = svg;
+            state.clef = clef || "treble";
+            clearLayer(svg);
+            state.staticLayer = el("g", { class: "staff-static" });
+            state.notesLayer = el("g", { class: "staff-notes" });
+            svg.appendChild(state.staticLayer);
+            svg.appendChild(state.notesLayer);
+            computeLayout();
+            drawStatic();
+            const onResize = () => {
+                computeLayout();
+                drawStatic();
+                state.noteEls.forEach(n => n.remove());
+                state.noteEls.clear();
+            };
+            window.addEventListener("resize", onResize);
+            if (typeof ResizeObserver !== "undefined") {
+                const ro = new ResizeObserver(onResize);
+                ro.observe(svg);
+            }
+        }
+
+        function setClef(clef) {
+            if (clef !== "treble" && clef !== "bass") return;
+            state.clef = clef;
+            drawStatic();
+            state.noteEls.forEach(n => n.remove());
+            state.noteEls.clear();
+        }
+
+        function render(stateSnapshot) {
+            const notesArr = stateSnapshot && stateSnapshot.notes ? stateSnapshot.notes : [];
+            const seen = new Set();
+            for (let i = 0; i < notesArr.length; i++) {
+                const n = notesArr[i];
+                seen.add(n.id);
+                let g = state.noteEls.get(n.id);
+                if (!g) {
+                    g = makeNoteEl(n);
+                    state.notesLayer.appendChild(g);
+                    state.noteEls.set(n.id, g);
+                }
+                g.setAttribute("transform", "translate(" + n.x + " 0)");
+                applyStateClass(g, n);
+            }
+            state.noteEls.forEach((g, id) => {
+                if (!seen.has(id)) {
+                    g.remove();
+                    state.noteEls.delete(id);
+                }
+            });
+        }
+
+        function getSpawnX() { return state.spawnX; }
+        function getJudgmentX() { return JUDGMENT_X; }
+        function getJudgmentTolerance() { return JUDGMENT_TOLERANCE; }
+
+        return { init, setClef, render, getSpawnX, getJudgmentX, getJudgmentTolerance,
+                 JUDGMENT_X, JUDGMENT_TOLERANCE };
+    })();
+
+    // ========================================================================
+    // engine module (game loop + adaptive difficulty)
+    // ========================================================================
+    const engine = (function () {
+        const BASE_SPEED = 50;
+        const SPEED_MIN = 40;
+        const SPEED_MAX = 250;
+        const WINDOW_SIZE = 20;
+        const MIN_WINDOW_TO_ACT = 10;
+        const ACC_UP = 0.95;
+        const ACC_DOWN = 0.70;
+        const TIER_FLOOR = 1;
+        const TIER_CAP = 4;
+        const MIN_NOTE_GAP_PX = 120;
+        const HIGH_SCORE_KEY = "solfege.highScore";
+
+        const engineState = {
+            staff: null, notesMod: null, settings: null,
+            running: false, rafId: 0, lastFrameMs: 0,
+            nextId: 1, activeNotes: [], lastSpawned: null,
+            speed: BASE_SPEED, tier: 1,
+            score: 0, streak: 0, highScore: 0, totalJudged: 0, totalHits: 0,
+            window: [],
+            timeSinceLastSpawn: 999,
+            statsListener: null, judgmentListener: null,
+            lastStatsSig: "",
+        };
+
+        function rollingAccuracy() {
+            if (engineState.window.length === 0) return 1.0;
+            let s = 0;
+            for (let i = 0; i < engineState.window.length; i++) s += engineState.window[i];
+            return s / engineState.window.length;
+        }
+
+        function pushOutcome(hit) {
+            engineState.window.push(hit ? 1 : 0);
+            if (engineState.window.length > WINDOW_SIZE) engineState.window.shift();
+        }
+
+        function loadHighScore() {
+            try {
+                const v = localStorage.getItem(HIGH_SCORE_KEY);
+                const n = v == null ? 0 : parseInt(v, 10);
+                return Number.isFinite(n) && n >= 0 ? n : 0;
+            } catch (_) { return 0; }
+        }
+
+        function saveHighScore(v) {
+            try { localStorage.setItem(HIGH_SCORE_KEY, String(v)); }
+            catch (_) { /* localStorage disabled */ }
+        }
+
+        function emitStats() {
+            if (!engineState.statsListener) return;
+            const stats = getStats();
+            const sig = stats.score + "|" + stats.streak + "|" +
+                stats.accuracy.toFixed(3) + "|" + stats.speed.toFixed(1) + "|" +
+                stats.tier + "|" + stats.totalJudged + "|" + stats.highScore;
+            if (sig === engineState.lastStatsSig) return;
+            engineState.lastStatsSig = sig;
+            engineState.statsListener(stats);
+        }
+
+        function emitJudgment(ev) {
+            if (engineState.judgmentListener) engineState.judgmentListener(ev);
+        }
+
+        function adjustDifficulty() {
+            if (engineState.window.length < MIN_WINDOW_TO_ACT) return;
+            const acc = rollingAccuracy();
+            let tierChanged = false;
+            if (acc >= ACC_UP) {
+                const newSpeed = Math.min(SPEED_MAX, engineState.speed * 1.05);
+                if (newSpeed !== engineState.speed) engineState.speed = newSpeed;
+                if (engineState.tier < TIER_CAP) { engineState.tier += 1; tierChanged = true; }
+            } else if (acc < ACC_DOWN) {
+                const newSpeed = Math.max(SPEED_MIN, engineState.speed * 0.9);
+                if (newSpeed !== engineState.speed) engineState.speed = newSpeed;
+                if (engineState.tier > TIER_FLOOR) { engineState.tier -= 1; tierChanged = true; }
+            }
+            if (tierChanged) engineState.window = [];
+        }
+
+        function spawnCooldownSeconds() {
+            const c = 1.4 - engineState.speed / 300;
+            return Math.min(1.4, Math.max(0.5, c));
+        }
+
+        function canSpawnNow() {
+            if (engineState.timeSinceLastSpawn < spawnCooldownSeconds()) return false;
+            const spawnX = engineState.staff.getSpawnX();
+            let maxX = -Infinity;
+            for (let i = 0; i < engineState.activeNotes.length; i++) {
+                const n = engineState.activeNotes[i];
+                if (n.x > maxX) maxX = n.x;
+            }
+            if (maxX === -Infinity) return true;
+            return (spawnX - maxX) >= MIN_NOTE_GAP_PX;
+        }
+
+        function spawnNote() {
+            const clef = (engineState.settings && engineState.settings.clef) || "treble";
+            const prev = engineState.lastSpawned;
+            const n = engineState.notesMod.generateNote({
+                tier: engineState.tier, clef: clef, previous: prev,
+                radius: mastery.getRadius(clef),
+                weightFn: (s, p) => mastery.weightFor(clef, s, p),
+            });
+            n.id = engineState.nextId++;
+            n.x = engineState.staff.getSpawnX();
+            n.state = "pending";
+            n.prevStep = prev && typeof prev.staffStep === "number" ? prev.staffStep : null;
+            engineState.activeNotes.push(n);
+            engineState.lastSpawned = n;
+            engineState.timeSinceLastSpawn = 0;
+        }
+
+        // Record a per-note/per-sequence outcome and possibly widen the range.
+        function recordMastery(note, hit) {
+            if (!note) return;
+            const clef = (engineState.settings && engineState.settings.clef) || "treble";
+            mastery.recordOutcome(clef, note.staffStep, note.prevStep, hit);
+            mastery.maybeExpand(clef, engineState.notesMod.poolSteps(engineState.tier, clef));
+        }
+
+        function step(dtSeconds) {
+            for (let i = 0; i < engineState.activeNotes.length; i++) {
+                const n = engineState.activeNotes[i];
+                if (n.state === "pending") n.x -= engineState.speed * dtSeconds;
+            }
+            const judgeX = engineState.staff.getJudgmentX();
+            const tol = engineState.staff.getJudgmentTolerance();
+            const expireX = judgeX - tol;
+            for (let i = 0; i < engineState.activeNotes.length; i++) {
+                const n = engineState.activeNotes[i];
+                if (n.state === "pending" && n.x < expireX) {
+                    n.state = "expired";
+                    engineState.totalJudged += 1;
+                    engineState.streak = 0;
+                    pushOutcome(false);
+                    recordMastery(n, false);
+                    emitJudgment({ kind: "expired", note: n, guess: null });
+                    adjustDifficulty();
+                }
+            }
+            const FLASH_MS = 200;
+            const nowMs = (typeof performance !== "undefined" ? performance.now() : Date.now());
+            engineState.activeNotes = engineState.activeNotes.filter(n => {
+                if (n.state === "pending") return true;
+                if (n.judgedAtMs == null) n.judgedAtMs = nowMs;
+                return (nowMs - n.judgedAtMs) < FLASH_MS;
+            });
+            engineState.timeSinceLastSpawn += dtSeconds;
+            if (canSpawnNow()) spawnNote();
+            engineState.staff.render({ notes: engineState.activeNotes });
+            emitStats();
+        }
+
+        function loop(nowMs) {
+            if (!engineState.running) return;
+            const dt = Math.min(0.05, (nowMs - engineState.lastFrameMs) / 1000);
+            engineState.lastFrameMs = nowMs;
+            step(dt);
+            engineState.rafId = requestAnimationFrame(loop);
+        }
+
+        function init(opts) {
+            const staffMod = opts && opts.staff;
+            const notesMod = opts && opts.notes;
+            const settingsSnap = opts && opts.settings;
+            if (!staffMod) throw new Error("engine.init: staff module required");
+            if (!notesMod) throw new Error("engine.init: notes module required");
+            engineState.staff = staffMod;
+            engineState.notesMod = notesMod;
+            engineState.settings = settingsSnap || { clef: "treble", startTier: 1 };
+            engineState.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP, engineState.settings.startTier || 1));
+            engineState.speed = BASE_SPEED;
+            mastery.load();
+            engineState.highScore = loadHighScore();
+            engineState.staff.render({ notes: [] });
+            emitStats();
+        }
+
+        function start() {
+            if (engineState.running) return;
+            engineState.running = true;
+            engineState.lastFrameMs = performance.now();
+            engineState.rafId = requestAnimationFrame(loop);
+        }
+
+        function pause() {
+            if (!engineState.running) return;
+            engineState.running = false;
+            if (engineState.rafId) cancelAnimationFrame(engineState.rafId);
+            engineState.rafId = 0;
+        }
+
+        function reset() {
+            engineState.activeNotes = [];
+            engineState.lastSpawned = null;
+            engineState.score = 0;
+            engineState.streak = 0;
+            engineState.totalJudged = 0;
+            engineState.totalHits = 0;
+            engineState.window = [];
+            engineState.speed = BASE_SPEED;
+            engineState.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP,
+                (engineState.settings && engineState.settings.startTier) || 1));
+            engineState.timeSinceLastSpawn = 999;
+            engineState.lastStatsSig = "";
+            engineState.staff.render({ notes: [] });
+            emitStats();
+        }
+
+        function submitGuess(guess) {
+            if (!guess) return;
+            const judgeX = engineState.staff.getJudgmentX();
+            const tol = engineState.staff.getJudgmentTolerance();
+            let target = null;
+            for (let i = 0; i < engineState.activeNotes.length; i++) {
+                const n = engineState.activeNotes[i];
+                if (n.state !== "pending") continue;
+                if (Math.abs(n.x - judgeX) <= tol) {
+                    if (target === null || n.x < target.x) target = n;
+                }
+            }
+            if (!target) return;
+
+            engineState.totalJudged += 1;
+            if (target.solfege === guess) {
+                target.state = "judged-hit";
+                engineState.streak += 1;
+                engineState.totalHits += 1;
+                const mult = Math.min(5, 1 + Math.floor(engineState.streak / 5));
+                engineState.score += 10 * mult;
+                if (engineState.score > engineState.highScore) {
+                    engineState.highScore = engineState.score;
+                    saveHighScore(engineState.highScore);
+                }
+                pushOutcome(true);
+                recordMastery(target, true);
+                emitJudgment({ kind: "hit", note: target, guess: guess });
+            } else {
+                target.state = "judged-miss";
+                engineState.streak = 0;
+                pushOutcome(false);
+                recordMastery(target, false);
+                emitJudgment({ kind: "miss", note: target, guess: guess });
+            }
+            adjustDifficulty();
+            engineState.staff.render({ notes: engineState.activeNotes });
+            emitStats();
+        }
+
+        function applySettings(newSettings) {
+            if (!newSettings) return;
+            const prev = engineState.settings || {};
+            engineState.settings = newSettings;
+            if (newSettings.clef && newSettings.clef !== prev.clef) {
+                engineState.activeNotes = [];
+                engineState.lastSpawned = null;
+                if (engineState.staff && typeof engineState.staff.setClef === "function") {
+                    engineState.staff.setClef(newSettings.clef);
+                }
+                engineState.staff.render({ notes: [] });
+            }
+        }
+
+        function onStatsChange(fn) {
+            engineState.statsListener = typeof fn === "function" ? fn : null;
+        }
+
+        function onJudgment(fn) {
+            engineState.judgmentListener = typeof fn === "function" ? fn : null;
+        }
+
+        function resetHighScore() {
+            engineState.highScore = 0;
+            try { localStorage.removeItem(HIGH_SCORE_KEY); }
+            catch (_) { /* localStorage disabled */ }
+            engineState.lastStatsSig = "";
+            emitStats();
+        }
+
+        function getStats() {
+            return {
+                score: engineState.score,
+                streak: engineState.streak,
+                accuracy: rollingAccuracy(),
+                speed: engineState.speed,
+                tier: engineState.tier,
+                totalJudged: engineState.totalJudged,
+                highScore: engineState.highScore,
+            };
+        }
+
+        return { init, start, pause, reset, submitGuess, applySettings,
+                 onStatsChange, onJudgment, resetHighScore, getStats };
+    })();
+
+    // ========================================================================
+    // ui module (HUD, buttons, settings panel, pause overlay)
+    // ========================================================================
+    const ui = (function () {
+        const KEY_MAP = {
+            "1": "DO", "2": "RE", "3": "MI", "4": "FA", "5": "SOL", "6": "LA", "7": "SI",
+            "d": "DO", "r": "RE", "m": "MI", "f": "FA", "g": "SOL", "l": "LA", "t": "SI",
+        };
+        const BUTTON_KEY_HINT = {
+            DO: "1 · D", RE: "2 · R", MI: "3 · M", FA: "4 · F",
+            SOL: "5 · G", LA: "6 · L", SI: "7 · T",
+        };
+        const HIGH_SCORE_KEY = "solfege.highScore";
+
+        const uiState = {
+            engineMod: null, settingsMod: null,
+            overlay: null,
+            lastStats: {}, running: false,
+        };
+
+        function $(sel) { return document.querySelector(sel); }
+        function on(el, ev, fn) { if (el) el.addEventListener(ev, fn); }
+
+        function decorateButtons() {
+            document.querySelectorAll(".solfege-btn").forEach((btn) => {
+                const label = btn.dataset.solfege;
+                if (!label) return;
+                const hint = BUTTON_KEY_HINT[label];
+                if (hint && !btn.querySelector(".solfege-key")) {
+                    const name = document.createElement("span");
+                    name.className = "solfege-name";
+                    name.textContent = label;
+                    const key = document.createElement("span");
+                    key.className = "solfege-key";
+                    key.textContent = hint;
+                    btn.textContent = "";
+                    btn.appendChild(name);
+                    btn.appendChild(key);
+                    btn.setAttribute("aria-label", label + " (keys " + hint + ")");
+                }
+            });
+        }
+
+        // Press / flash now operate on EVERY element with matching data-solfege
+        // so both the solfège buttons and the piano keys light up. Only one
+        // layout is visible at a time, so users see the right feedback.
+        function pressButton(label) {
+            document.querySelectorAll('[data-solfege="' + label + '"]').forEach((el) => {
+                el.classList.add("pressed");
+                setTimeout(() => el.classList.remove("pressed"), 110);
+            });
+        }
+
+        function flashButton(label, kind) {
+            const cls = kind === "hit" ? "flash-good" : "flash-bad";
+            document.querySelectorAll('[data-solfege="' + label + '"]').forEach((el) => {
+                el.classList.remove("flash-good", "flash-bad");
+                void el.offsetWidth;
+                el.classList.add(cls);
+                setTimeout(() => el.classList.remove(cls), 280);
+            });
+        }
+
+        function setAnswerLayout(layout) {
+            const btns = document.getElementById("solfege-buttons");
+            const piano = document.getElementById("piano-keyboard");
+            if (!btns || !piano) return;
+            if (layout === "piano") {
+                btns.setAttribute("hidden", "");
+                piano.removeAttribute("hidden");
+            } else {
+                piano.setAttribute("hidden", "");
+                btns.removeAttribute("hidden");
+            }
+        }
+
+        function setOverlay(running) {
+            uiState.running = running;
+            if (!uiState.overlay) return;
+            if (running) {
+                uiState.overlay.classList.add("hidden");
+                uiState.overlay.setAttribute("aria-hidden", "true");
+            } else {
+                uiState.overlay.classList.remove("hidden");
+                uiState.overlay.setAttribute("aria-hidden", "false");
+            }
+            const startBtn = $("#btn-start");
+            const pauseBtn = $("#btn-pause");
+            if (startBtn) startBtn.disabled = running;
+            if (pauseBtn) pauseBtn.disabled = !running;
+        }
+
+        function writeHud(id, key, value) {
+            if (uiState.lastStats[key] === value) return;
+            uiState.lastStats[key] = value;
+            const el = document.getElementById(id);
+            if (el) el.textContent = String(value);
+        }
+
+        function init(opts) {
+            const engine = opts && opts.engine;
+            const settings = opts && opts.settings;
+            if (!engine) throw new Error("ui.init: engine module required");
+            if (!settings) throw new Error("ui.init: settings module required");
+            uiState.engineMod = engine;
+            uiState.settingsMod = settings;
+
+            decorateButtons();
+
+            document.querySelectorAll(".solfege-btn, .piano-key").forEach((btn) => {
+                on(btn, "click", () => {
+                    const label = btn.dataset.solfege;
+                    if (!label) return;
+                    pressButton(label);
+                    engine.submitGuess(label);
+                });
+            });
+
+            // Answer-layout radios
+            document.querySelectorAll('input[name="answer-layout"]').forEach((radio) => {
+                on(radio, "change", () => {
+                    if (!radio.checked) return;
+                    const layout = radio.value;
+                    settings.update({ answerLayout: layout });
+                    setAnswerLayout(layout);
+                });
+            });
+
+            window.addEventListener("keydown", (e) => {
+                if (e.repeat) return;
+                if (e.key === "Escape") {
+                    const panel = document.getElementById("settings-panel");
+                    if (panel && !panel.hasAttribute("hidden")) {
+                        toggleSettingsPanel(false);
+                        return;
+                    }
+                }
+                const t = e.target;
+                if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
+                    if (!(t.tagName === "INPUT" && t.type === "range")) return;
+                }
+                if (e.code === "Space") {
+                    e.preventDefault();
+                    if (uiState.running) engine.pause(); else engine.start();
+                    setOverlay(uiState.running ? false : true);
+                    return;
+                }
+                const k = e.key.toLowerCase();
+                const label = KEY_MAP[k];
+                if (label) {
+                    e.preventDefault();
+                    pressButton(label);
+                    engine.submitGuess(label);
+                }
+            });
+
+            on($("#settings-toggle"), "click", () => toggleSettingsPanel());
+            on($("#settings-close"), "click", () => toggleSettingsPanel(false));
+            on($("#settings-backdrop"), "click", () => toggleSettingsPanel(false));
+
+            document.querySelectorAll('input[name="clef"]').forEach((radio) => {
+                on(radio, "change", () => {
+                    if (!radio.checked) return;
+                    const clef = radio.value;
+                    const wasRunning = uiState.running;
+                    if (wasRunning) engine.pause();
+                    const newSettings = settings.update({ clef });
+                    engine.applySettings(newSettings);
+                    engine.reset();
+                    if (wasRunning) engine.start();
+                    setOverlay(wasRunning);
+                });
+            });
+
+            const startTier = $("#start-tier");
+            const startTierOut = $("#start-tier-output");
+            if (startTier && startTierOut) {
+                const sync = () => { startTierOut.textContent = startTier.value; };
+                sync();
+                on(startTier, "input", sync);
+                on(startTier, "change", () => {
+                    const v = parseInt(startTier.value, 10);
+                    settings.update({ startTier: v });
+                });
+            }
+
+            on($("#btn-start"), "click", () => { engine.start(); setOverlay(true); });
+            on($("#btn-pause"), "click", () => { engine.pause(); setOverlay(false); });
+            on($("#btn-reset"), "click", () => { engine.reset(); });
+
+            on($("#btn-reset-highscore"), "click", () => {
+                if (!confirm("Reset high score?")) return;
+                if (typeof engine.resetHighScore === "function") {
+                    engine.resetHighScore();
+                } else {
+                    try { localStorage.removeItem(HIGH_SCORE_KEY); } catch (_) {}
+                    const el = document.getElementById("hud-highscore");
+                    if (el) el.textContent = "0";
+                }
+            });
+
+            on($("#btn-reset-mastery"), "click", () => {
+                if (!confirm("Reset training memory? This clears which notes you've practiced.")) return;
+                mastery.reset();
+            });
+
+            uiState.overlay = $("#pause-overlay");
+            on(uiState.overlay, "click", () => { engine.start(); setOverlay(true); });
+
+            engine.onStatsChange(updateHud);
+            engine.onJudgment(flashFeedback);
+
+            // Sync from current settings (apply persisted clef + tier + layout to UI controls).
+            const cur = settings.get ? settings.get() : null;
+            if (cur) {
+                document.querySelectorAll('input[name="clef"]').forEach((r) => {
+                    r.checked = (r.value === cur.clef);
+                });
+                if (startTier && cur.startTier) {
+                    startTier.value = String(cur.startTier);
+                    if (startTierOut) startTierOut.textContent = String(cur.startTier);
+                }
+                const layout = cur.answerLayout || "buttons";
+                document.querySelectorAll('input[name="answer-layout"]').forEach((r) => {
+                    r.checked = (r.value === layout);
+                });
+                setAnswerLayout(layout);
+            }
+
+            setOverlay(false);
+            queueMicrotask(() => { setOverlay(true); });
+        }
+
+        function updateHud(stats) {
+            if (!stats) return;
+            writeHud("hud-score", "score", stats.score);
+            writeHud("hud-streak", "streak", stats.streak);
+            const accPct = stats.totalJudged > 0
+                ? Math.round(stats.accuracy * 100) + "%"
+                : "--%";
+            writeHud("hud-accuracy", "accuracy", accPct);
+            writeHud("hud-speed", "speed", Math.round(stats.speed));
+            writeHud("hud-tier", "tier", stats.tier);
+            writeHud("hud-highscore", "highScore", stats.highScore != null ? stats.highScore : 0);
+        }
+
+        function flashFeedback(ev) {
+            if (!ev || !ev.note) return;
+            if (ev.kind === "hit") {
+                flashButton(ev.note.solfege, "hit");
+            } else if (ev.kind === "miss") {
+                flashButton(ev.note.solfege, "miss");
+                if (ev.guess) flashButton(ev.guess, "miss");
+            } else if (ev.kind === "expired") {
+                flashButton(ev.note.solfege, "miss");
+            }
+        }
+
+        function toggleSettingsPanel(force) {
+            const panel = document.getElementById("settings-panel");
+            const toggle = document.getElementById("settings-toggle");
+            const backdrop = document.getElementById("settings-backdrop");
+            if (!panel) return;
+            const willShow = force == null ? panel.hasAttribute("hidden") : !!force;
+            if (willShow) {
+                panel.removeAttribute("hidden");
+                if (backdrop) backdrop.removeAttribute("hidden");
+                if (toggle) toggle.setAttribute("aria-expanded", "true");
+            } else {
+                panel.setAttribute("hidden", "");
+                if (backdrop) backdrop.setAttribute("hidden", "");
+                if (toggle) toggle.setAttribute("aria-expanded", "false");
+            }
+        }
+
+        return { init, updateHud, flashFeedback, toggleSettingsPanel };
+    })();
+
+    // ========================================================================
+    // boot
+    // ========================================================================
+    function boot() {
+        const svg = document.getElementById("staff-svg");
+        if (!svg) throw new Error("boot: #staff-svg element not found in document");
+        const snap = settings.load();
+        staff.init({ svg: svg, clef: snap.clef });
+        engine.init({ staff: staff, notes: notes, settings: snap });
+        ui.init({ engine: engine, settings: settings });
+        engine.start();
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", boot, { once: true });
+    } else {
+        boot();
+    }
+})();
+    </script>
+</body>
+</html>
