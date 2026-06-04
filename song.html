@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solfege Trainer</title>
+    <title>Solfege Trainer — Songs</title>
     <style>
 :root {
     --bg: #15181d;
@@ -51,6 +51,13 @@ body { display: flex; flex-direction: column; }
 }
 .settings-toggle:hover { background: #2a313b; }
 .app-main { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: var(--pad); gap: var(--pad); }
+.song-banner {
+    flex: 0 0 auto; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px;
+    padding: 2px 6px;
+}
+.song-banner-title { font-size: 1.02rem; font-weight: 600; letter-spacing: 0.03em; }
+.song-banner-sub { font-size: 0.82rem; color: var(--fg-muted); }
+.song-banner-key { font-size: 0.82rem; color: var(--accent-hot); font-weight: 600; }
 .staff-container {
     position: relative; flex: 1 1 auto; min-height: 240px;
     background: var(--bg-staff); border-radius: var(--radius); overflow: hidden;
@@ -64,7 +71,7 @@ body { display: flex; flex-direction: column; }
 .hud-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .hud-label { font-size: 0.72rem; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.08em; }
 .hud-value { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg); }
-.hud-value.hud-level { font-size: 1.05rem; color: var(--accent-hot); }
+.hud-value.hud-small { font-size: 1.05rem; color: var(--accent-hot); }
 .solfege-buttons { flex: 0 0 auto; display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--pad); }
 .solfege-btn {
     font-family: var(--font); font-size: clamp(1.1rem, 2.4vw, 1.6rem); font-weight: 700;
@@ -126,6 +133,13 @@ body { display: flex; flex-direction: column; }
     border-radius: var(--radius); padding: 10px 16px; margin-right: 6px; cursor: pointer;
 }
 .settings-panel button:hover { border-color: var(--accent); }
+.settings-panel select {
+    width: 100%; background: var(--bg); color: var(--fg);
+    border: 1px solid #3a414c; border-radius: var(--radius);
+    padding: 10px; font-size: 1rem; cursor: pointer;
+}
+.settings-panel select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-panel .song-meta { color: var(--fg-muted); font-size: 0.82rem; margin: 10px 0 0; line-height: 1.4; }
 .settings-panel input[type="range"] { width: 100%; accent-color: var(--accent); }
 .settings-panel input[type="number"] {
     width: 92px; background: var(--bg); color: var(--fg);
@@ -136,17 +150,6 @@ body { display: flex; flex-direction: column; }
 .settings-panel input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .settings-panel .field-row { display: flex; align-items: center; justify-content: space-between; }
 .settings-panel .field-unit { color: var(--fg-muted); font-size: 0.8rem; margin-left: 8px; }
-.settings-panel .study-hint { color: var(--fg-muted); font-size: 0.8rem; margin: 0 0 10px; }
-.settings-panel .study-group { margin-bottom: 10px; }
-.settings-panel .study-group-label {
-    display: block; color: var(--accent); font-size: 0.78rem;
-    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px;
-}
-.settings-panel .study-names { display: grid; grid-template-columns: repeat(2, 1fr); }
-.settings-panel output {
-    display: inline-block; font-variant-numeric: tabular-nums;
-    color: var(--accent-hot); font-weight: 600; margin-left: 8px;
-}
 .settings-panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .settings-panel button:disabled { opacity: 0.5; cursor: default; }
 #btn-reset-highscore { background: #3a1a1a; border-color: #5a2a2a; }
@@ -157,6 +160,7 @@ body { display: flex; flex-direction: column; }
 .note-head      { fill: var(--staff-ink); }
 .note-stem      { stroke: var(--staff-ink); stroke-width: 1.6; }
 .note-accidental{ fill: var(--staff-ink); font-family: serif; font-size: 22px; }
+.note-lyric     { fill: var(--staff-ink); font-family: var(--font); font-size: 13px; opacity: 0.75; }
 .staff-static  { pointer-events: none; }
 .staff-notes   { pointer-events: none; }
 .note          { transition: opacity 180ms ease; }
@@ -288,9 +292,9 @@ body { display: flex; flex-direction: column; }
         <h1>Solfège Trainer</h1>
         <div class="header-actions">
             <nav class="mode-switch" aria-label="Trainer mode">
-                <a class="mode-tab is-active" href="app.html" aria-current="page">Notes</a>
+                <a class="mode-tab" href="app.html">Notes</a>
                 <a class="mode-tab" href="chords.html">Chords</a>
-                <a class="mode-tab" href="song.html">Songs</a>
+                <a class="mode-tab is-active" href="song.html" aria-current="page">Songs</a>
             </nav>
             <a class="app-link" href="index.html">Home</a>
             <button id="settings-toggle" class="settings-toggle" aria-label="Toggle settings" aria-controls="settings-panel" aria-expanded="false">Settings</button>
@@ -298,12 +302,18 @@ body { display: flex; flex-direction: column; }
     </header>
 
     <main class="app-main">
+        <div class="song-banner">
+            <span class="song-banner-title" id="song-title">—</span>
+            <span class="song-banner-sub" id="song-sub"></span>
+            <span class="song-banner-key" id="song-key"></span>
+        </div>
+
         <section id="staff-container" class="staff-container" aria-label="Musical staff">
             <svg id="staff-svg" class="staff-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"></svg>
             <div id="pause-overlay" class="pause-overlay" role="button" tabindex="0" aria-label="Paused — click to start" aria-hidden="true">
                 <div class="pause-overlay-inner">
                     <div class="pause-overlay-icon">&#9654;</div>
-                    <div class="pause-overlay-text">Click to Start</div>
+                    <div class="pause-overlay-text">Click to Play</div>
                     <div class="pause-overlay-hint">(Space toggles pause)</div>
                 </div>
             </div>
@@ -314,8 +324,8 @@ body { display: flex; flex-direction: column; }
             <div class="hud-cell"><span class="hud-label">Streak</span><span id="hud-streak" class="hud-value">0</span></div>
             <div class="hud-cell"><span class="hud-label">Accuracy</span><span id="hud-accuracy" class="hud-value">--%</span></div>
             <div class="hud-cell"><span class="hud-label">Speed</span><span id="hud-speed" class="hud-value">--</span></div>
-            <div class="hud-cell"><span class="hud-label">Tier</span><span id="hud-tier" class="hud-value">1</span></div>
-            <div class="hud-cell"><span class="hud-label">Level</span><span id="hud-level" class="hud-value hud-level" title="Expertise on your study set">Novice</span></div>
+            <div class="hud-cell"><span class="hud-label">Progress</span><span id="hud-progress" class="hud-value hud-small">0/0</span></div>
+            <div class="hud-cell"><span class="hud-label">Loops</span><span id="hud-loops" class="hud-value">0</span></div>
             <div class="hud-cell"><span class="hud-label">Best</span><span id="hud-highscore" class="hud-value">0</span></div>
         </section>
 
@@ -352,9 +362,9 @@ body { display: flex; flex-direction: column; }
             <button id="settings-close" class="settings-close" type="button" aria-label="Close settings">&times;</button>
         </div>
         <fieldset>
-            <legend>Clef</legend>
-            <label><input type="radio" name="clef" value="treble" checked> Clef de Sol (Treble)</label>
-            <label><input type="radio" name="clef" value="bass"> Clef de Fa (Bass)</label>
+            <legend>Song</legend>
+            <select id="song-select" aria-label="Choose a song"></select>
+            <p class="song-meta" id="song-meta"></p>
         </fieldset>
         <fieldset>
             <legend>Answer Layout</legend>
@@ -367,91 +377,59 @@ body { display: flex; flex-direction: column; }
             <label><input type="radio" name="notation" value="letters"> A B C (Letters)</label>
         </fieldset>
         <fieldset>
-            <legend>Study Set</legend>
-            <p class="study-hint">Pick which notes to practise. Tier sets the range; add or remove to match your goal.</p>
-            <div class="study-group">
-                <span class="study-group-label">Notes</span>
-                <div class="study-names">
-                    <label><input type="checkbox" data-study-name="DO"> <span class="study-name" data-name="DO">DO</span></label>
-                    <label><input type="checkbox" data-study-name="RE"> <span class="study-name" data-name="RE">RE</span></label>
-                    <label><input type="checkbox" data-study-name="MI"> <span class="study-name" data-name="MI">MI</span></label>
-                    <label><input type="checkbox" data-study-name="FA"> <span class="study-name" data-name="FA">FA</span></label>
-                    <label><input type="checkbox" data-study-name="SOL"> <span class="study-name" data-name="SOL">SOL</span></label>
-                    <label><input type="checkbox" data-study-name="LA"> <span class="study-name" data-name="LA">LA</span></label>
-                    <label><input type="checkbox" data-study-name="SI"> <span class="study-name" data-name="SI">SI</span></label>
-                </div>
-            </div>
-            <label><input type="checkbox" id="study-accidentals"> Include accidentals (&#9839; / &#9837;)</label>
-            <button id="btn-study-default" type="button">Use default</button>
-        </fieldset>
-
-        <fieldset>
-            <legend>Starting Difficulty Tier</legend>
-            <label><input type="range" id="start-tier" min="1" max="4" value="1" step="1"></label>
-            <output id="start-tier-output">1</output>
+            <legend>Lyrics</legend>
+            <label><input type="checkbox" id="show-lyrics"> Show lyric syllables under notes</label>
         </fieldset>
         <fieldset>
             <legend>Speed</legend>
             <label class="field-row">Scroll speed
-                <span><input type="number" id="speed-input" min="40" max="250" step="5" value="50"><span class="field-unit">px/s</span></span>
+                <span><input type="number" id="speed-input" min="40" max="250" step="5" value="60"><span class="field-unit">px/s</span></span>
             </label>
         </fieldset>
         <fieldset>
             <legend>Game</legend>
-            <button id="btn-start" type="button">Start</button>
+            <button id="btn-start" type="button">Play</button>
             <button id="btn-pause" type="button">Pause</button>
-            <button id="btn-reset" type="button">Reset</button>
+            <button id="btn-reset" type="button">Restart Song</button>
         </fieldset>
         <fieldset>
             <legend>High Score</legend>
             <button id="btn-reset-highscore" type="button">Reset High Score</button>
         </fieldset>
-        <fieldset>
-            <legend>Training</legend>
-            <button id="btn-reset-mastery" type="button">Reset Training Memory</button>
-        </fieldset>
     </aside>
 
     <script>
 /*
- * Solfege Trainer - standalone single-file build.
- * Bundles the 5 ES modules (settings, notes, staff, engine, ui) as IIFEs
- * so the app runs from file:// without a web server. The modular source
- * under js/ remains the source of truth for development; this file is the
- * built artifact.
+ * Solfege Trainer — Song mode. Standalone single-file build.
+ *
+ * Same scrolling-staff reading drill as the Notes trainer, but instead of
+ * spawning random notes the engine walks through the melody of a real song,
+ * note by note, looping at the end. The player reads each note and answers
+ * with its solfège name. Songs live in the `songs` module below.
+ *
+ * Pitches are spelled with the app's fixed-Do chromatic convention (flats are
+ * shown as their sharp/Bb enharmonic), matching the Notes trainer.
  */
 (function () {
     "use strict";
 
     // ========================================================================
-    // settings module
+    // settings module (shares storage key with the other trainers)
     // ========================================================================
     const settings = (function () {
         const SETTINGS_KEY = "solfege.settings.v1";
-        const ALL_NAMES = ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"];
         const DEFAULTS = Object.freeze({
-            clef: "treble", startTier: 1, answerLayout: "buttons", notation: "solfege", speed: 50,
-            studyNames: ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"], studyAccidentals: false,
+            clef: "treble", answerLayout: "buttons", notation: "solfege", speed: 60,
+            song: "vapor-trail", showLyrics: false,
         });
         let current = null;
 
         function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
-        function sanitizeList(raw, allowed, fallback) {
-            if (!Array.isArray(raw)) return fallback.slice();
-            const out = [];
-            raw.forEach((v) => {
-                if (allowed.indexOf(v) !== -1 && out.indexOf(v) === -1) out.push(v);
-            });
-            return out.length ? out : fallback.slice();
-        }
-
         function sanitize(raw) {
             const out = clone(DEFAULTS);
             if (raw && typeof raw === "object") {
                 if (raw.clef === "treble" || raw.clef === "bass") out.clef = raw.clef;
-                const t = parseInt(raw.startTier, 10);
-                if (Number.isFinite(t) && t >= 1) out.startTier = t;
                 if (raw.answerLayout === "buttons" || raw.answerLayout === "piano") {
                     out.answerLayout = raw.answerLayout;
                 }
@@ -460,8 +438,8 @@ body { display: flex; flex-direction: column; }
                 }
                 const sp = parseInt(raw.speed, 10);
                 if (Number.isFinite(sp)) out.speed = Math.min(250, Math.max(40, sp));
-                out.studyNames = sanitizeList(raw.studyNames, ALL_NAMES, DEFAULTS.studyNames);
-                out.studyAccidentals = !!raw.studyAccidentals;
+                if (typeof raw.song === "string" && raw.song) out.song = raw.song;
+                out.showLyrics = !!raw.showLyrics;
             }
             return out;
         }
@@ -500,7 +478,7 @@ body { display: flex; flex-direction: column; }
     })();
 
     // ========================================================================
-    // notes module
+    // notes module (pitch helpers + note builder)
     // ========================================================================
     const notes = (function () {
         const SOLFEGE_ORDER = ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"];
@@ -533,49 +511,6 @@ body { display: flex; flex-direction: column; }
             return diatonic - middle;
         }
 
-        const C_MAJOR_PCS = [0, 2, 4, 5, 7, 9, 11];
-        function isInCMajor(midi) {
-            const pc = ((midi % 12) + 12) % 12;
-            return C_MAJOR_PCS.includes(pc);
-        }
-
-        // Tier controls the vertical RANGE; the study set decides WHICH notes
-        // (names + whether accidentals appear) are drawn from that range.
-        function tierRange(tier, clef) {
-            const center = clef === "bass" ? [41, 53] : [60, 72];
-            if (tier <= 1) return [center[0], center[1]];
-            if (tier === 2) return [center[0] - 12, center[1] + 12];
-            if (tier === 3) return [center[0] - 12, center[1] + 12];
-            return [center[0] - 14, center[1] + 14];
-        }
-
-        function buildPool(tier, clef, study) {
-            const range = tierRange(Math.max(1, Math.floor(tier || 1)), clef);
-            const lo = range[0], hi = range[1];
-            const names = study && study.names ? study.names : null;
-            const accidentals = !!(study && study.accidentals);
-
-            const pool = [];
-            for (let m = lo; m <= hi; m++) {
-                const pc = ((m % 12) + 12) % 12;
-                if (!NATURAL_PCS.has(pc) && !accidentals) continue;
-                if (names && !names.has(midiToSolfege(m))) continue;
-                pool.push(m);
-            }
-            // Never stall (e.g. nothing selected): fall back to C-major naturals.
-            if (pool.length === 0) {
-                for (let m = lo; m <= hi; m++) if (isInCMajor(m)) pool.push(m);
-            }
-            return pool;
-        }
-
-        function maxIntervalSemitones(tier) {
-            if (tier <= 1) return 4;
-            if (tier === 2) return 7;
-            if (tier === 3) return 12;
-            return 17;
-        }
-
         function buildNote(midi, clef) {
             return {
                 id: 0, midi,
@@ -586,190 +521,89 @@ body { display: flex; flex-direction: column; }
             };
         }
 
-        function generateNote(opts) {
-            const tier = opts && opts.tier;
-            const clef = opts && opts.clef;
-            const previous = opts && opts.previous;
-            const radius = opts && typeof opts.radius === "number" ? opts.radius : null;
-            const weightFn = opts && typeof opts.weightFn === "function" ? opts.weightFn : null;
-            const t = Math.max(1, Math.floor(tier || 1));
-            const pool = buildPool(t, clef, opts && opts.study);
-            if (pool.length === 0) return buildNote(clef === "bass" ? 41 : 60, clef);
-
-            const maxInt = maxIntervalSemitones(t);
-            let candidates;
-            if (previous && typeof previous.midi === "number") {
-                candidates = pool.filter(m =>
-                    m !== previous.midi && Math.abs(m - previous.midi) <= maxInt
-                );
-                if (candidates.length === 0) candidates = pool.filter(m => m !== previous.midi);
-                if (candidates.length === 0) candidates = pool;
-            } else {
-                candidates = pool;
-            }
-
-            // Vertical-window gate: keep only positions within `radius` of the
-            // staff center. Falls back to the full candidate list if empty.
-            if (radius != null) {
-                const within = candidates.filter(m => Math.abs(midiToStaffStep(m, clef)) <= radius);
-                if (within.length > 0) candidates = within;
-            }
-
-            let pick;
-            if (weightFn) {
-                const prevStep = previous && typeof previous.staffStep === "number"
-                    ? previous.staffStep : null;
-                const weights = candidates.map(m => {
-                    const w = weightFn(midiToStaffStep(m, clef), prevStep);
-                    return w > 0 ? w : 0.0001;
-                });
-                let total = 0;
-                for (let i = 0; i < weights.length; i++) total += weights[i];
-                let r = Math.random() * total;
-                pick = candidates[candidates.length - 1];
-                for (let i = 0; i < candidates.length; i++) {
-                    r -= weights[i];
-                    if (r <= 0) { pick = candidates[i]; break; }
-                }
-            } else {
-                pick = candidates[Math.floor(Math.random() * candidates.length)];
-            }
-            return buildNote(pick, clef);
-        }
-
-        function poolSteps(tier, clef, study) {
-            const t = Math.max(1, Math.floor(tier || 1));
-            const seen = {};
-            const out = [];
-            buildPool(t, clef, study).forEach((m) => {
-                const s = midiToStaffStep(m, clef);
-                if (!seen[s]) { seen[s] = true; out.push(s); }
-            });
-            return out;
-        }
-
-        return { SOLFEGE_ORDER, midiToSolfege, midiToAccidental, midiToStaffStep, generateNote, poolSteps };
+        return { SOLFEGE_ORDER, midiToSolfege, midiToAccidental, midiToStaffStep, buildNote };
     })();
 
     // ========================================================================
-    // mastery module (hidden per-note / per-sequence training score)
+    // songs module (the melody library)
     // ========================================================================
-    const mastery = (function () {
-        const KEY = "solfege.mastery.v1";
-        const ALPHA = 0.25;          // EMA learning rate
-        const EPS = 0.15;            // floor weight so mastered notes still appear
-        const EXPAND_THRESH = 0.8;   // in-window mastery needed to widen the range
-        const R_START = 2;           // initial vertical half-window (steps from center)
-        const R_MAX = 10;
-        const CENTER = 0;            // staffStep 0 = middle line
+    //
+    // Each song is a list of melody notes given as MIDI numbers, in order.
+    // Middle C = 60 (= DO). `lyrics` (optional) lines up syllable-for-note.
+    const songs = (function () {
+        const LIBRARY = [
+            {
+                id: "vapor-trail",
+                title: "Vapor Trail — ひこうき雲 (Hikōki-gumo)",
+                composer: "Yumi Arai / Matsutoya · The Wind Rises",
+                keyName: "E♭ major",
+                clef: "treble",
+                // The E♭-major intro: a rolling eighth-note arpeggio figure that
+                // climbs and falls through each bar's chord (E♭ · A♭ · Gm7 · A♭).
+                // E♭4=63 G4=67 B♭4=70 A♭4=68 C5=72 E♭5=75 G5=79 B♭5=82 D5=74 F5=77
+                notes: [
+                    // Bar 1 — E♭ chord
+                    63, 67, 70, 67, 63, 67, 70, 67,
+                    // Bar 2 — A♭ chord
+                    68, 72, 75, 72, 68, 72, 75, 72,
+                    // Bar 3 — Gm7 (reaches up to the high F)
+                    67, 70, 74, 77, 74, 70, 74, 70,
+                    // Bar 4 — A♭ rising to the top, then settle
+                    68, 72, 75, 79, 82, 79, 75, 72,
+                ],
+            },
+            {
+                id: "twinkle",
+                title: "Twinkle, Twinkle, Little Star",
+                composer: "Trad. (Ah! vous dirai-je, maman)",
+                keyName: "C major",
+                clef: "treble",
+                // C C G G A A G | F F E E D D C
+                notes: [60, 60, 67, 67, 69, 69, 67, 65, 65, 64, 64, 62, 62, 60],
+                lyrics: ["Twin", "kle", "twin", "kle", "lit", "tle", "star",
+                         "how", "I", "won", "der", "what", "you", "are"],
+            },
+            {
+                id: "ode-to-joy",
+                title: "Ode to Joy",
+                composer: "Beethoven · Symphony No. 9",
+                keyName: "C major",
+                clef: "treble",
+                // E E F G G F E D C C D E E D D
+                notes: [64, 64, 65, 67, 67, 65, 64, 62, 60, 60, 62, 64, 64, 62, 62],
+            },
+            {
+                id: "frere-jacques",
+                title: "Frère Jacques",
+                composer: "Trad. French round",
+                keyName: "C major",
+                clef: "treble",
+                // C D E C | C D E C | E F G | E F G | G A G F E C | G A G F E C | C G C | C G C
+                notes: [
+                    60, 62, 64, 60, 60, 62, 64, 60,
+                    64, 65, 67, 64, 65, 67,
+                    67, 69, 67, 65, 64, 60, 67, 69, 67, 65, 64, 60,
+                    60, 55, 60, 60, 55, 60,
+                ],
+            },
+            {
+                id: "ode-bass",
+                title: "Ode to Joy (Bass clef)",
+                composer: "Beethoven · for Clef de Fa practice",
+                keyName: "C major",
+                clef: "bass",
+                notes: [52, 52, 53, 55, 55, 53, 52, 50, 48, 48, 50, 52, 52, 50, 50],
+            },
+        ];
 
-        let data = null;
-
-        function freshClef() {
-            return { notes: {}, seq: {}, radius: R_START };
-        }
-
-        function load() {
-            if (data) return;
-            let raw = null;
-            try {
-                const s = localStorage.getItem(KEY);
-                if (s) raw = JSON.parse(s);
-            } catch (_) { raw = null; }
-            data = { treble: freshClef(), bass: freshClef() };
-            if (raw && typeof raw === "object") {
-                ["treble", "bass"].forEach((c) => {
-                    const src = raw[c];
-                    if (src && typeof src === "object") {
-                        if (src.notes && typeof src.notes === "object") data[c].notes = src.notes;
-                        if (src.seq && typeof src.seq === "object") data[c].seq = src.seq;
-                        const r = parseInt(src.radius, 10);
-                        if (Number.isFinite(r) && r >= R_START) data[c].radius = Math.min(R_MAX, r);
-                    }
-                });
+        function byId(id) {
+            for (let i = 0; i < LIBRARY.length; i++) {
+                if (LIBRARY[i].id === id) return LIBRARY[i];
             }
+            return LIBRARY[0];
         }
 
-        function save() {
-            if (!data) return;
-            try { localStorage.setItem(KEY, JSON.stringify(data)); }
-            catch (_) { /* localStorage disabled / quota */ }
-        }
-
-        function forClef(clef) {
-            if (!data) load();
-            return data[clef === "bass" ? "bass" : "treble"];
-        }
-
-        function getRadius(clef) {
-            return forClef(clef).radius;
-        }
-
-        function noteM(d, step) {
-            const v = d.notes[step];
-            return typeof v === "number" ? v : 0;
-        }
-
-        function seqM(d, prev, cur) {
-            const v = d.seq[prev + ">>" + cur];
-            return typeof v === "number" ? v : 0;
-        }
-
-        // Mean per-note mastery (0..1) over a set of staff steps; unseen = 0.
-        function averageOver(clef, steps) {
-            if (!steps || !steps.length) return 0;
-            const d = forClef(clef);
-            let s = 0;
-            for (let i = 0; i < steps.length; i++) s += noteM(d, steps[i]);
-            return s / steps.length;
-        }
-
-        // Selection weight: low mastery -> high weight (appears more often).
-        function weightFor(clef, curStep, prevStep) {
-            const d = forClef(clef);
-            const noteW = (1 - noteM(d, curStep)) + EPS;
-            if (prevStep == null) return noteW;
-            const seqW = (1 - seqM(d, prevStep, curStep)) + EPS;
-            return 0.5 * noteW + 0.5 * seqW;
-        }
-
-        function bump(cur, hit) {
-            // EMA toward 1 on hit, toward 0 on miss.
-            return hit ? cur + ALPHA * (1 - cur) : cur * (1 - ALPHA);
-        }
-
-        function recordOutcome(clef, curStep, prevStep, hit) {
-            const d = forClef(clef);
-            d.notes[curStep] = bump(noteM(d, curStep), hit);
-            if (prevStep != null) {
-                const k = prevStep + ">>" + curStep;
-                d.seq[k] = bump(seqM(d, prevStep, curStep), hit);
-            }
-            save();
-        }
-
-        // Widen the vertical window once every in-window step that actually
-        // exists in the current tier pool is mastered. Unseen in-window steps
-        // (mastery 0) block expansion until they are seen + mastered.
-        function maybeExpand(clef, poolSteps) {
-            const d = forClef(clef);
-            if (d.radius >= R_MAX) return;
-            let sawAny = false;
-            for (let i = 0; i < poolSteps.length; i++) {
-                const s = poolSteps[i];
-                if (Math.abs(s - CENTER) > d.radius) continue;
-                sawAny = true;
-                if (noteM(d, s) < EXPAND_THRESH) return;
-            }
-            if (sawAny) { d.radius = Math.min(R_MAX, d.radius + 1); save(); }
-        }
-
-        function reset() {
-            data = { treble: freshClef(), bass: freshClef() };
-            save();
-        }
-
-        return { load, save, getRadius, weightFor, recordOutcome, maybeExpand, averageOver, reset };
+        return { LIBRARY, byId };
     })();
 
     // ========================================================================
@@ -781,7 +615,7 @@ body { display: flex; flex-direction: column; }
         const SVG_NS = "http://www.w3.org/2000/svg";
 
         const state = {
-            svg: null, clef: "treble",
+            svg: null, clef: "treble", showLyrics: false,
             width: 0, height: 0, staffLineGap: 12, middleY: 0, spawnX: 0,
             staticLayer: null, notesLayer: null,
             noteEls: new Map(),
@@ -919,6 +753,14 @@ body { display: flex; flex-direction: column; }
                 t.textContent = sym;
                 g.appendChild(t);
             }
+            if (state.showLyrics && note.lyric) {
+                const ly = el("text", {
+                    class: "note-lyric", x: 0, y: yForStep(-9),
+                    "text-anchor": "middle",
+                });
+                ly.textContent = note.lyric;
+                g.appendChild(ly);
+            }
             return g;
         }
 
@@ -934,6 +776,7 @@ body { display: flex; flex-direction: column; }
             if (!svg) throw new Error("staff.init: svg element required");
             state.svg = svg;
             state.clef = clef || "treble";
+            state.showLyrics = !!(opts && opts.showLyrics);
             clearLayer(svg);
             state.staticLayer = el("g", { class: "staff-static" });
             state.notesLayer = el("g", { class: "staff-notes" });
@@ -958,6 +801,12 @@ body { display: flex; flex-direction: column; }
             if (clef !== "treble" && clef !== "bass") return;
             state.clef = clef;
             drawStatic();
+            state.noteEls.forEach(n => n.remove());
+            state.noteEls.clear();
+        }
+
+        function setShowLyrics(on) {
+            state.showLyrics = !!on;
             state.noteEls.forEach(n => n.remove());
             state.noteEls.clear();
         }
@@ -989,32 +838,29 @@ body { display: flex; flex-direction: column; }
         function getJudgmentX() { return JUDGMENT_X; }
         function getJudgmentTolerance() { return JUDGMENT_TOLERANCE; }
 
-        return { init, setClef, render, getSpawnX, getJudgmentX, getJudgmentTolerance,
+        return { init, setClef, setShowLyrics, render, getSpawnX, getJudgmentX, getJudgmentTolerance,
                  JUDGMENT_X, JUDGMENT_TOLERANCE };
     })();
 
     // ========================================================================
-    // engine module (game loop + adaptive difficulty)
+    // engine module (sequence player — walks the song melody, looping)
     // ========================================================================
     const engine = (function () {
-        const BASE_SPEED = 50;
+        const BASE_SPEED = 60;
         const SPEED_MIN = 40;
         const SPEED_MAX = 250;
         const WINDOW_SIZE = 20;
-        const MIN_WINDOW_TO_ACT = 10;
-        const ACC_UP = 0.95;
-        const ACC_DOWN = 0.70;
-        const TIER_FLOOR = 1;
-        const TIER_CAP = 4;
         const MIN_NOTE_GAP_PX = 120;
-        const HIGH_SCORE_KEY = "solfege.highScore";
+        const HIGH_SCORE_KEY = "solfege.song.highScore";
 
         const engineState = {
             staff: null, notesMod: null, settings: null,
+            song: null, sequence: [], lyrics: null,
             running: false, rafId: 0, lastFrameMs: 0,
-            nextId: 1, activeNotes: [], lastSpawned: null,
-            speed: BASE_SPEED, tier: 1,
-            score: 0, streak: 0, highScore: 0, totalJudged: 0, totalHits: 0,
+            nextId: 1, activeNotes: [], seqIndex: 0,
+            speed: BASE_SPEED,
+            score: 0, streak: 0, highScore: 0,
+            judged: 0, loops: 0,
             window: [],
             timeSinceLastSpawn: 999,
             statsListener: null, judgmentListener: null,
@@ -1062,20 +908,12 @@ body { display: flex; flex-direction: column; }
             catch (_) { /* localStorage disabled */ }
         }
 
-        function studySet() {
-            const s = engineState.settings || {};
-            const names = Array.isArray(s.studyNames) && s.studyNames.length
-                ? s.studyNames : engineState.notesMod.SOLFEGE_ORDER;
-            return { names: new Set(names), accidentals: !!s.studyAccidentals };
-        }
-
         function emitStats() {
             if (!engineState.statsListener) return;
             const stats = getStats();
             const sig = stats.score + "|" + stats.streak + "|" +
                 stats.accuracy.toFixed(3) + "|" + stats.speed.toFixed(1) + "|" +
-                stats.tier + "|" + stats.totalJudged + "|" + stats.highScore + "|" +
-                stats.expertise.toFixed(3);
+                stats.progress + "|" + stats.total + "|" + stats.loops + "|" + stats.highScore;
             if (sig === engineState.lastStatsSig) return;
             engineState.lastStatsSig = sig;
             engineState.statsListener(stats);
@@ -1083,22 +921,6 @@ body { display: flex; flex-direction: column; }
 
         function emitJudgment(ev) {
             if (engineState.judgmentListener) engineState.judgmentListener(ev);
-        }
-
-        function adjustDifficulty() {
-            if (engineState.window.length < MIN_WINDOW_TO_ACT) return;
-            const acc = rollingAccuracy();
-            let tierChanged = false;
-            if (acc >= ACC_UP) {
-                const newSpeed = Math.min(SPEED_MAX, engineState.speed * 1.05);
-                if (newSpeed !== engineState.speed) engineState.speed = newSpeed;
-                if (engineState.tier < TIER_CAP) { engineState.tier += 1; tierChanged = true; }
-            } else if (acc < ACC_DOWN) {
-                const newSpeed = Math.max(SPEED_MIN, engineState.speed * 0.9);
-                if (newSpeed !== engineState.speed) engineState.speed = newSpeed;
-                if (engineState.tier > TIER_FLOOR) { engineState.tier -= 1; tierChanged = true; }
-            }
-            if (tierChanged) engineState.window = [];
         }
 
         function spawnCooldownSeconds() {
@@ -1119,29 +941,29 @@ body { display: flex; flex-direction: column; }
         }
 
         function spawnNote() {
+            const seq = engineState.sequence;
+            if (!seq || !seq.length) return;
             const clef = (engineState.settings && engineState.settings.clef) || "treble";
-            const prev = engineState.lastSpawned;
-            const n = engineState.notesMod.generateNote({
-                tier: engineState.tier, clef: clef, previous: prev,
-                radius: mastery.getRadius(clef),
-                study: studySet(),
-                weightFn: (s, p) => mastery.weightFor(clef, s, p),
-            });
+            const idx = engineState.seqIndex % seq.length;
+            const midi = seq[idx];
+            const n = engineState.notesMod.buildNote(midi, clef);
             n.id = engineState.nextId++;
             n.x = engineState.staff.getSpawnX();
             n.state = "pending";
-            n.prevStep = prev && typeof prev.staffStep === "number" ? prev.staffStep : null;
+            n.seqIndex = idx;
+            if (engineState.lyrics && engineState.lyrics[idx]) n.lyric = engineState.lyrics[idx];
             engineState.activeNotes.push(n);
-            engineState.lastSpawned = n;
+            engineState.seqIndex += 1;
             engineState.timeSinceLastSpawn = 0;
         }
 
-        // Record a per-note/per-sequence outcome and possibly widen the range.
-        function recordMastery(note, hit) {
-            if (!note) return;
-            const clef = (engineState.settings && engineState.settings.clef) || "treble";
-            mastery.recordOutcome(clef, note.staffStep, note.prevStep, hit);
-            mastery.maybeExpand(clef, engineState.notesMod.poolSteps(engineState.tier, clef, studySet()));
+        // Each judged note advances the song position; wrapping bumps the loop count.
+        function advanceProgress() {
+            engineState.judged += 1;
+            const len = engineState.sequence.length || 1;
+            if (engineState.judged > 0 && engineState.judged % len === 0) {
+                engineState.loops += 1;
+            }
         }
 
         function step(dtSeconds) {
@@ -1156,12 +978,10 @@ body { display: flex; flex-direction: column; }
                 const n = engineState.activeNotes[i];
                 if (n.state === "pending" && n.x < expireX) {
                     n.state = "expired";
-                    engineState.totalJudged += 1;
                     engineState.streak = 0;
                     pushOutcome(false);
-                    recordMastery(n, false);
+                    advanceProgress();
                     emitJudgment({ kind: "expired", note: n, guess: null });
-                    adjustDifficulty();
                 }
             }
             const FLASH_MS = 200;
@@ -1185,18 +1005,28 @@ body { display: flex; flex-direction: column; }
             engineState.rafId = requestAnimationFrame(loop);
         }
 
+        function loadSong(id) {
+            const song = engineState.songsMod.byId(id);
+            engineState.song = song;
+            engineState.sequence = (song && song.notes) ? song.notes.slice() : [];
+            engineState.lyrics = (song && song.lyrics) ? song.lyrics : null;
+            return song;
+        }
+
         function init(opts) {
             const staffMod = opts && opts.staff;
             const notesMod = opts && opts.notes;
+            const songsMod = opts && opts.songs;
             const settingsSnap = opts && opts.settings;
             if (!staffMod) throw new Error("engine.init: staff module required");
             if (!notesMod) throw new Error("engine.init: notes module required");
+            if (!songsMod) throw new Error("engine.init: songs module required");
             engineState.staff = staffMod;
             engineState.notesMod = notesMod;
-            engineState.settings = settingsSnap || { clef: "treble", startTier: 1 };
-            engineState.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP, engineState.settings.startTier || 1));
+            engineState.songsMod = songsMod;
+            engineState.settings = settingsSnap || { clef: "treble" };
             engineState.speed = configuredSpeed();
-            mastery.load();
+            loadSong(engineState.settings.song);
             engineState.highScore = loadHighScore();
             engineState.staff.render({ notes: [] });
             emitStats();
@@ -1218,25 +1048,31 @@ body { display: flex; flex-direction: column; }
 
         function reset() {
             engineState.activeNotes = [];
-            engineState.lastSpawned = null;
+            engineState.seqIndex = 0;
             engineState.score = 0;
             engineState.streak = 0;
-            engineState.totalJudged = 0;
-            engineState.totalHits = 0;
+            engineState.judged = 0;
+            engineState.loops = 0;
             engineState.window = [];
             engineState.speed = configuredSpeed();
-            engineState.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP,
-                (engineState.settings && engineState.settings.startTier) || 1));
             engineState.timeSinceLastSpawn = 999;
             engineState.lastStatsSig = "";
             engineState.staff.render({ notes: [] });
             emitStats();
         }
 
+        // Switch to a different song; resets progress and applies the song's clef.
+        function setSong(id) {
+            const song = loadSong(id);
+            reset();
+            return song;
+        }
+
+        function currentSong() { return engineState.song; }
+
         function submitGuess(guess) {
             if (!guess) return;
-            // No timing window: judge the leading pending note (the one closest to
-            // the line), so the player can answer as soon as they recognize it.
+            // Judge the leading pending note (closest to the line).
             let target = null;
             for (let i = 0; i < engineState.activeNotes.length; i++) {
                 const n = engineState.activeNotes[i];
@@ -1245,11 +1081,9 @@ body { display: flex; flex-direction: column; }
             }
             if (!target) return;
 
-            engineState.totalJudged += 1;
             if (target.solfege === guess) {
                 target.state = "judged-hit";
                 engineState.streak += 1;
-                engineState.totalHits += 1;
                 const mult = Math.min(5, 1 + Math.floor(engineState.streak / 5));
                 engineState.score += 10 * mult;
                 if (engineState.score > engineState.highScore) {
@@ -1257,16 +1091,15 @@ body { display: flex; flex-direction: column; }
                     saveHighScore(engineState.highScore);
                 }
                 pushOutcome(true);
-                recordMastery(target, true);
+                advanceProgress();
                 emitJudgment({ kind: "hit", note: target, guess: guess });
             } else {
                 target.state = "judged-miss";
                 engineState.streak = 0;
                 pushOutcome(false);
-                recordMastery(target, false);
+                advanceProgress();
                 emitJudgment({ kind: "miss", note: target, guess: guess });
             }
-            adjustDifficulty();
             engineState.staff.render({ notes: engineState.activeNotes });
             emitStats();
         }
@@ -1277,7 +1110,7 @@ body { display: flex; flex-direction: column; }
             engineState.settings = newSettings;
             if (newSettings.clef && newSettings.clef !== prev.clef) {
                 engineState.activeNotes = [];
-                engineState.lastSpawned = null;
+                engineState.seqIndex = 0;
                 if (engineState.staff && typeof engineState.staff.setClef === "function") {
                     engineState.staff.setClef(newSettings.clef);
                 }
@@ -1285,16 +1118,6 @@ body { display: flex; flex-direction: column; }
             }
             if (newSettings.speed != null && newSettings.speed !== prev.speed) {
                 setSpeed(newSettings.speed);
-            }
-            const studyChanged =
-                JSON.stringify(prev.studyNames) !== JSON.stringify(newSettings.studyNames) ||
-                prev.studyAccidentals !== newSettings.studyAccidentals;
-            if (studyChanged) {
-                engineState.activeNotes = [];
-                engineState.lastSpawned = null;
-                engineState.lastStatsSig = "";
-                engineState.staff.render({ notes: [] });
-                emitStats();
             }
         }
 
@@ -1315,24 +1138,22 @@ body { display: flex; flex-direction: column; }
         }
 
         function getStats() {
-            const clef = (engineState.settings && engineState.settings.clef) || "treble";
-            const steps = engineState.notesMod
-                ? engineState.notesMod.poolSteps(engineState.tier, clef, studySet())
-                : [];
+            const len = engineState.sequence.length || 0;
+            const progress = len ? (engineState.judged % len) : 0;
             return {
                 score: engineState.score,
                 streak: engineState.streak,
                 accuracy: rollingAccuracy(),
                 speed: engineState.speed,
-                tier: engineState.tier,
-                totalJudged: engineState.totalJudged,
+                progress: progress,
+                total: len,
+                loops: engineState.loops,
                 highScore: engineState.highScore,
-                expertise: mastery.averageOver(clef, steps),
             };
         }
 
-        return { init, start, pause, reset, submitGuess, applySettings, setSpeed,
-                 onStatsChange, onJudgment, resetHighScore, getStats };
+        return { init, start, pause, reset, setSong, currentSong, submitGuess,
+                 applySettings, setSpeed, onStatsChange, onJudgment, resetHighScore, getStats };
     })();
 
     // ========================================================================
@@ -1353,10 +1174,9 @@ body { display: flex; flex-direction: column; }
         function nameFor(label, notation) {
             return notation === "letters" ? (LETTER_OF[label] || label) : label;
         }
-        const HIGH_SCORE_KEY = "solfege.highScore";
 
         const uiState = {
-            engineMod: null, settingsMod: null,
+            engineMod: null, settingsMod: null, songsMod: null,
             overlay: null,
             lastStats: {}, running: false,
         };
@@ -1384,7 +1204,6 @@ body { display: flex; flex-direction: column; }
             });
         }
 
-        // Relabel solfège buttons + piano keys for the chosen note-name system.
         function applyNotation(notation) {
             const useLetters = notation === "letters";
             document.querySelectorAll(".solfege-btn").forEach((btn) => {
@@ -1403,15 +1222,8 @@ body { display: flex; flex-direction: column; }
                 const subEl = k.querySelector(".piano-sub");
                 if (subEl) subEl.textContent = useLetters ? (k.dataset.letterSub || "") : (k.dataset.solSub || "");
             });
-            document.querySelectorAll(".study-name").forEach((el) => {
-                const sol = el.dataset.name;
-                if (sol) el.textContent = nameFor(sol, notation);
-            });
         }
 
-        // Press / flash now operate on EVERY element with matching data-solfege
-        // so both the solfège buttons and the piano keys light up. Only one
-        // layout is visible at a time, so users see the right feedback.
         function pressButton(label) {
             document.querySelectorAll('[data-solfege="' + label + '"]').forEach((el) => {
                 el.classList.add("pressed");
@@ -1465,13 +1277,45 @@ body { display: flex; flex-direction: column; }
             if (el) el.textContent = String(value);
         }
 
+        function showSongInfo(song) {
+            if (!song) return;
+            const titleEl = document.getElementById("song-title");
+            const subEl = document.getElementById("song-sub");
+            const keyEl = document.getElementById("song-key");
+            const metaEl = document.getElementById("song-meta");
+            if (titleEl) titleEl.textContent = song.title;
+            if (subEl) subEl.textContent = song.composer || "";
+            if (keyEl) keyEl.textContent = song.keyName ? (song.keyName + " · " + (song.clef === "bass" ? "Bass" : "Treble")) : "";
+            if (metaEl) {
+                metaEl.textContent = (song.composer || "") +
+                    (song.keyName ? " — " + song.keyName : "") +
+                    " · " + (song.notes ? song.notes.length : 0) + " notes";
+            }
+        }
+
+        function populateSongSelect(songsMod, currentId) {
+            const sel = document.getElementById("song-select");
+            if (!sel) return;
+            sel.textContent = "";
+            songsMod.LIBRARY.forEach((s) => {
+                const opt = document.createElement("option");
+                opt.value = s.id;
+                opt.textContent = s.title;
+                if (s.id === currentId) opt.selected = true;
+                sel.appendChild(opt);
+            });
+        }
+
         function init(opts) {
             const engine = opts && opts.engine;
             const settings = opts && opts.settings;
+            const songsMod = opts && opts.songs;
             if (!engine) throw new Error("ui.init: engine module required");
             if (!settings) throw new Error("ui.init: settings module required");
+            if (!songsMod) throw new Error("ui.init: songs module required");
             uiState.engineMod = engine;
             uiState.settingsMod = settings;
+            uiState.songsMod = songsMod;
 
             const curNotation = (settings.get ? settings.get().notation : "solfege") || "solfege";
             decorateButtons(curNotation);
@@ -1516,7 +1360,7 @@ body { display: flex; flex-direction: column; }
                     }
                 }
                 const t = e.target;
-                if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
+                if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) {
                     if (!(t.tagName === "INPUT" && t.type === "range")) return;
                 }
                 if (e.code === "Space") {
@@ -1538,29 +1382,28 @@ body { display: flex; flex-direction: column; }
             on($("#settings-close"), "click", () => toggleSettingsPanel(false));
             on($("#settings-backdrop"), "click", () => toggleSettingsPanel(false));
 
-            document.querySelectorAll('input[name="clef"]').forEach((radio) => {
-                on(radio, "change", () => {
-                    if (!radio.checked) return;
-                    const clef = radio.value;
-                    const wasRunning = uiState.running;
-                    if (wasRunning) engine.pause();
-                    const newSettings = settings.update({ clef });
-                    engine.applySettings(newSettings);
-                    engine.reset();
-                    if (wasRunning) engine.start();
-                    setOverlay(wasRunning);
+            // Song selector
+            const songSelect = $("#song-select");
+            populateSongSelect(songsMod, settings.get().song);
+            if (songSelect) {
+                on(songSelect, "change", () => {
+                    const id = songSelect.value;
+                    if (uiState.running) engine.pause();
+                    const song = engine.setSong(id);
+                    // A song carries its own clef; persist it so the staff matches.
+                    const saved = settings.update({ song: id, clef: song.clef || "treble" });
+                    engine.applySettings(saved);
+                    showSongInfo(song);
+                    setOverlay(false);
                 });
-            });
+            }
 
-            const startTier = $("#start-tier");
-            const startTierOut = $("#start-tier-output");
-            if (startTier && startTierOut) {
-                const sync = () => { startTierOut.textContent = startTier.value; };
-                sync();
-                on(startTier, "input", sync);
-                on(startTier, "change", () => {
-                    const v = parseInt(startTier.value, 10);
-                    settings.update({ startTier: v });
+            // Lyrics toggle
+            const lyricsEl = $("#show-lyrics");
+            if (lyricsEl) {
+                on(lyricsEl, "change", () => {
+                    settings.update({ showLyrics: lyricsEl.checked });
+                    if (typeof staff.setShowLyrics === "function") staff.setShowLyrics(lyricsEl.checked);
                 });
             }
 
@@ -1575,50 +1418,13 @@ body { display: flex; flex-direction: column; }
                 });
             }
 
-            // Study-set checkboxes (note names + accidentals).
-            const studyAccEl = $("#study-accidentals");
-            function readStudyFromUI() {
-                const names = Array.prototype.map.call(
-                    document.querySelectorAll('[data-study-name]:checked'), c => c.dataset.studyName);
-                return { names: names, accidentals: !!(studyAccEl && studyAccEl.checked) };
-            }
-            function applyStudyToUI(study) {
-                document.querySelectorAll('[data-study-name]').forEach((c) => {
-                    c.checked = study.names.indexOf(c.dataset.studyName) !== -1;
-                });
-                if (studyAccEl) studyAccEl.checked = !!study.accidentals;
-            }
-            function commitStudy() {
-                const st = readStudyFromUI();
-                const saved = settings.update({ studyNames: st.names, studyAccidentals: st.accidentals });
-                applyStudyToUI({ names: saved.studyNames, accidentals: saved.studyAccidentals });
-                engine.applySettings(saved);
-            }
-            document.querySelectorAll('[data-study-name]').forEach((c) => on(c, "change", commitStudy));
-            if (studyAccEl) on(studyAccEl, "change", commitStudy);
-            on($("#btn-study-default"), "click", () => {
-                applyStudyToUI({ names: ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"], accidentals: false });
-                commitStudy();
-            });
-
             on($("#btn-start"), "click", () => { engine.start(); setOverlay(true); });
             on($("#btn-pause"), "click", () => { engine.pause(); setOverlay(false); });
             on($("#btn-reset"), "click", () => { engine.reset(); });
 
             on($("#btn-reset-highscore"), "click", () => {
-                if (!confirm("Reset high score?")) return;
-                if (typeof engine.resetHighScore === "function") {
-                    engine.resetHighScore();
-                } else {
-                    try { localStorage.removeItem(HIGH_SCORE_KEY); } catch (_) {}
-                    const el = document.getElementById("hud-highscore");
-                    if (el) el.textContent = "0";
-                }
-            });
-
-            on($("#btn-reset-mastery"), "click", () => {
-                if (!confirm("Reset training memory? This clears which notes you've practiced.")) return;
-                mastery.reset();
+                if (!confirm("Reset song high score?")) return;
+                if (typeof engine.resetHighScore === "function") engine.resetHighScore();
             });
 
             uiState.overlay = $("#pause-overlay");
@@ -1627,16 +1433,9 @@ body { display: flex; flex-direction: column; }
             engine.onStatsChange(updateHud);
             engine.onJudgment(flashFeedback);
 
-            // Sync from current settings (apply persisted clef + tier + layout to UI controls).
+            // Sync controls from persisted settings.
             const cur = settings.get ? settings.get() : null;
             if (cur) {
-                document.querySelectorAll('input[name="clef"]').forEach((r) => {
-                    r.checked = (r.value === cur.clef);
-                });
-                if (startTier && cur.startTier) {
-                    startTier.value = String(cur.startTier);
-                    if (startTierOut) startTierOut.textContent = String(cur.startTier);
-                }
                 if (speedInput && cur.speed) speedInput.value = String(cur.speed);
                 const layout = cur.answerLayout || "buttons";
                 document.querySelectorAll('input[name="answer-layout"]').forEach((r) => {
@@ -1648,38 +1447,26 @@ body { display: flex; flex-direction: column; }
                     r.checked = (r.value === notation);
                 });
                 applyNotation(notation);
-                applyStudyToUI({
-                    names: cur.studyNames || ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"],
-                    accidentals: !!cur.studyAccidentals,
-                });
+                if (lyricsEl) lyricsEl.checked = !!cur.showLyrics;
             }
+
+            showSongInfo(engine.currentSong());
 
             setOverlay(false);
             queueMicrotask(() => { setOverlay(true); });
-        }
-
-        function levelLabel(p) {
-            if (p < 0.2) return "Novice";
-            if (p < 0.4) return "Beginner";
-            if (p < 0.6) return "Skilled";
-            if (p < 0.8) return "Advanced";
-            return "Expert";
         }
 
         function updateHud(stats) {
             if (!stats) return;
             writeHud("hud-score", "score", stats.score);
             writeHud("hud-streak", "streak", stats.streak);
-            const accPct = stats.totalJudged > 0
+            const accPct = stats.progress > 0 || stats.loops > 0
                 ? Math.round(stats.accuracy * 100) + "%"
                 : "--%";
             writeHud("hud-accuracy", "accuracy", accPct);
             writeHud("hud-speed", "speed", Math.round(stats.speed));
-            writeHud("hud-tier", "tier", stats.tier);
-            const exp = stats.expertise != null ? stats.expertise : 0;
-            writeHud("hud-level", "level", levelLabel(exp));
-            const lvlEl = document.getElementById("hud-level");
-            if (lvlEl) lvlEl.title = "Expertise on your study set: " + Math.round(exp * 100) + "%";
+            writeHud("hud-progress", "progress", stats.progress + "/" + stats.total);
+            writeHud("hud-loops", "loops", stats.loops);
             writeHud("hud-highscore", "highScore", stats.highScore != null ? stats.highScore : 0);
         }
 
@@ -1722,9 +1509,15 @@ body { display: flex; flex-direction: column; }
         const svg = document.getElementById("staff-svg");
         if (!svg) throw new Error("boot: #staff-svg element not found in document");
         const snap = settings.load();
-        staff.init({ svg: svg, clef: snap.clef });
-        engine.init({ staff: staff, notes: notes, settings: snap });
-        ui.init({ engine: engine, settings: settings });
+        // The chosen song decides the clef; keep settings + staff in sync.
+        const song = songs.byId(snap.song);
+        if (song && song.clef && song.clef !== snap.clef) {
+            settings.update({ clef: song.clef });
+        }
+        const ready = settings.get();
+        staff.init({ svg: svg, clef: ready.clef, showLyrics: ready.showLyrics });
+        engine.init({ staff: staff, notes: notes, songs: songs, settings: ready });
+        ui.init({ engine: engine, settings: settings, songs: songs });
         engine.start();
     }
 
