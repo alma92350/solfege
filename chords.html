@@ -53,12 +53,13 @@ body { display: flex; flex-direction: column; }
 }
 .staff-svg { display: block; width: 100%; height: 100%; }
 .hud {
-    flex: 0 0 auto; display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--pad);
+    flex: 0 0 auto; display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--pad);
     background: var(--bg-elev); border-radius: var(--radius); padding: var(--pad);
 }
 .hud-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .hud-label { font-size: 0.72rem; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.08em; }
 .hud-value { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg); }
+.hud-value.hud-level { font-size: 1.05rem; color: var(--accent-hot); }
 
 /* ===== chord answer area: root row + quality row ===== */
 .chord-answer { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--pad); }
@@ -136,6 +137,12 @@ body { display: flex; flex-direction: column; }
 .settings-panel input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .settings-panel .field-row { display: flex; align-items: center; justify-content: space-between; }
 .settings-panel .field-unit { color: var(--fg-muted); font-size: 0.8rem; margin-left: 8px; }
+.settings-panel .study-hint { color: var(--fg-muted); font-size: 0.8rem; margin: 0 0 10px; }
+.settings-panel .study-group { margin-bottom: 10px; }
+.settings-panel .study-group-label {
+    display: block; color: var(--accent); font-size: 0.78rem;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px;
+}
 .settings-panel output {
     display: inline-block; font-variant-numeric: tabular-nums;
     color: var(--accent-hot); font-weight: 600; margin-left: 8px;
@@ -218,6 +225,7 @@ body { display: flex; flex-direction: column; }
             <div class="hud-cell"><span class="hud-label">Accuracy</span><span id="hud-accuracy" class="hud-value">--%</span></div>
             <div class="hud-cell"><span class="hud-label">Speed</span><span id="hud-speed" class="hud-value">--</span></div>
             <div class="hud-cell"><span class="hud-label">Tier</span><span id="hud-tier" class="hud-value">1</span></div>
+            <div class="hud-cell"><span class="hud-label">Level</span><span id="hud-level" class="hud-value hud-level" title="Expertise on your study set">Novice</span></div>
             <div class="hud-cell"><span class="hud-label">Best</span><span id="hud-highscore" class="hud-value">0</span></div>
         </section>
 
@@ -255,6 +263,24 @@ body { display: flex; flex-direction: column; }
             <legend>Note Names</legend>
             <label><input type="radio" name="notation" value="solfege" checked> Do Re Mi (Solfège)</label>
             <label><input type="radio" name="notation" value="letters"> A B C (Letters)</label>
+        </fieldset>
+        <fieldset>
+            <legend>Study Set</legend>
+            <p class="study-hint">Pick what to practise. Tier sets the defaults; add or remove to match your goal.</p>
+            <div class="study-group">
+                <span class="study-group-label">Chord qualities</span>
+                <label><input type="checkbox" data-study-quality="maj"> Major</label>
+                <label><input type="checkbox" data-study-quality="min"> Minor</label>
+                <label><input type="checkbox" data-study-quality="dim"> Diminished</label>
+                <label><input type="checkbox" data-study-quality="aug"> Augmented</label>
+            </div>
+            <div class="study-group">
+                <span class="study-group-label">Inversions</span>
+                <label><input type="checkbox" data-study-inv="0"> Root position</label>
+                <label><input type="checkbox" data-study-inv="1"> 1st inversion</label>
+                <label><input type="checkbox" data-study-inv="2"> 2nd inversion</label>
+            </div>
+            <button id="btn-study-default" type="button">Use default</button>
         </fieldset>
         <fieldset>
             <legend>Starting Difficulty Tier</legend>
@@ -298,10 +324,23 @@ body { display: flex; flex-direction: column; }
     // ========================================================================
     const settings = (function () {
         const SETTINGS_KEY = "chords.settings.v1";
-        const DEFAULTS = Object.freeze({ clef: "treble", startTier: 1, notation: "solfege", speed: 50 });
+        const ALL_QUALITIES = ["maj", "min", "dim", "aug"];
+        const DEFAULTS = Object.freeze({
+            clef: "treble", startTier: 1, notation: "solfege", speed: 50,
+            studyQualities: ["maj", "min", "dim"], studyInversions: [0],
+        });
         let current = null;
 
         function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+        function sanitizeList(raw, allowed, fallback) {
+            if (!Array.isArray(raw)) return fallback.slice();
+            const out = [];
+            raw.forEach((v) => {
+                if (allowed.indexOf(v) !== -1 && out.indexOf(v) === -1) out.push(v);
+            });
+            return out.length ? out : fallback.slice();
+        }
 
         function sanitize(raw) {
             const out = clone(DEFAULTS);
@@ -312,6 +351,10 @@ body { display: flex; flex-direction: column; }
                 if (raw.notation === "solfege" || raw.notation === "letters") out.notation = raw.notation;
                 const sp = parseInt(raw.speed, 10);
                 if (Number.isFinite(sp)) out.speed = Math.min(250, Math.max(40, sp));
+                out.studyQualities = sanitizeList(raw.studyQualities, ALL_QUALITIES, DEFAULTS.studyQualities);
+                const invRaw = Array.isArray(raw.studyInversions)
+                    ? raw.studyInversions.map((n) => parseInt(n, 10)) : null;
+                out.studyInversions = sanitizeList(invRaw, [0, 1, 2], DEFAULTS.studyInversions);
             }
             return out;
         }
@@ -405,14 +448,25 @@ body { display: flex; flex-direction: column; }
         SCALE.forEach((d) => { QUALITY_BY_PC[d.pc] = d.q; });
         const AUG_ROOT_PCS = new Set([0, 5, 7]); // tonic / subdominant / dominant
 
-        // Difficulty knobs per tier. The full set of diatonic triads is available
-        // from tier 1; higher tiers add inversions, augmented chords, and a wider
-        // vertical window so chords climb across the whole staff.
-        function tierConfig(tier) {
-            if (tier <= 1) return { aug: false, inv: [0],       win: 6  };
-            if (tier === 2) return { aug: false, inv: [0, 1],    win: 9  };
-            if (tier === 3) return { aug: false, inv: [0, 1, 2], win: 11 };
-            return                  { aug: true,  inv: [0, 1, 2], win: 12 };
+        // Tier now only controls the vertical window (how far chords climb across
+        // the staff). WHAT to study (qualities + inversions) comes from the study
+        // set, so the player can practise exactly what they choose.
+        function tierWindow(tier) {
+            if (tier <= 1) return 6;
+            if (tier === 2) return 9;
+            if (tier === 3) return 11;
+            return 12;
+        }
+
+        function defaultStudy() {
+            return { qualities: ["maj", "min", "dim"], inversions: [0] };
+        }
+
+        function normStudy(study) {
+            const s = study || {};
+            const q = Array.isArray(s.qualities) && s.qualities.length ? s.qualities : defaultStudy().qualities;
+            const inv = Array.isArray(s.inversions) && s.inversions.length ? s.inversions : defaultStudy().inversions;
+            return { qualities: q, inversions: inv };
         }
 
         // Build one chord voicing. inversion 0 = root position, 1 = first, 2 = second.
@@ -447,32 +501,43 @@ body { display: flex; flex-direction: column; }
             return true;
         }
 
+        // Whether a diatonic root (pc) can carry the requested quality.
+        function rootSupports(pc, quality) {
+            if (QUALITY_BY_PC[pc] === quality) return true;
+            if (quality === "aug" && AUG_ROOT_PCS.has(pc)) return true;
+            return false;
+        }
+
+        function buildCandidates(tier, clef, study) {
+            const s = normStudy(study);
+            const win = tierWindow(Math.max(1, Math.floor(tier || 1)));
+            const loRoot = clef === "bass" ? 33 : 50;
+            const hiRoot = clef === "bass" ? 67 : 84;
+            const out = [];
+            for (let r = loRoot; r <= hiRoot; r++) {
+                const pc = ((r % 12) + 12) % 12;
+                if (!QUALITY_BY_PC.hasOwnProperty(pc)) continue; // not a diatonic root
+                for (let qi = 0; qi < s.qualities.length; qi++) {
+                    const q = s.qualities[qi];
+                    if (!rootSupports(pc, q)) continue;
+                    for (let ii = 0; ii < s.inversions.length; ii++) {
+                        const chord = buildChord(r, q, s.inversions[ii], clef);
+                        if (withinWindow(chord, win)) out.push(chord);
+                    }
+                }
+            }
+            return out;
+        }
+
         function generateChord(opts) {
             const tier = Math.max(1, Math.floor((opts && opts.tier) || 1));
             const clef = opts && opts.clef;
             const previous = opts && opts.previous;
             const weightFn = opts && typeof opts.weightFn === "function" ? opts.weightFn : null;
-            const cfg = tierConfig(tier);
-            const loRoot = clef === "bass" ? 33 : 50;
-            const hiRoot = clef === "bass" ? 67 : 84;
 
-            const candidates = [];
-            for (let r = loRoot; r <= hiRoot; r++) {
-                const pc = ((r % 12) + 12) % 12;
-                const baseQ = QUALITY_BY_PC[pc];
-                if (!baseQ) continue; // not a diatonic root
-                const qualities = [baseQ];
-                if (cfg.aug && AUG_ROOT_PCS.has(pc)) qualities.push("aug");
-                for (let qi = 0; qi < qualities.length; qi++) {
-                    for (let ii = 0; ii < cfg.inv.length; ii++) {
-                        const chord = buildChord(r, qualities[qi], cfg.inv[ii], clef);
-                        if (withinWindow(chord, cfg.win)) candidates.push(chord);
-                    }
-                }
-            }
-            if (candidates.length === 0) {
-                return buildChord(clef === "bass" ? 50 : 60, "maj", 0, clef);
-            }
+            let candidates = buildCandidates(tier, clef, opts && opts.study);
+            if (candidates.length === 0) candidates = buildCandidates(tier, clef, defaultStudy());
+            if (candidates.length === 0) return buildChord(clef === "bass" ? 50 : 60, "maj", 0, clef);
 
             let pool = candidates;
             if (previous && previous.key) {
@@ -498,7 +563,17 @@ body { display: flex; flex-direction: column; }
             return pool[Math.floor(Math.random() * pool.length)];
         }
 
-        return { generateChord };
+        // Distinct training keys for the active study set (drives the expertise meter).
+        function studyKeys(tier, clef, study) {
+            const seen = {};
+            const out = [];
+            buildCandidates(tier, clef, study).forEach((c) => {
+                if (!seen[c.key]) { seen[c.key] = true; out.push(c.key); }
+            });
+            return out;
+        }
+
+        return { generateChord, studyKeys };
     })();
 
     // ========================================================================
@@ -559,12 +634,21 @@ body { display: flex; flex-direction: column; }
             save();
         }
 
+        // Mean mastery (0..1) over a set of keys; unseen keys count as 0.
+        function averageOver(clef, keys) {
+            if (!keys || !keys.length) return 0;
+            const d = forClef(clef);
+            let s = 0;
+            for (let i = 0; i < keys.length; i++) s += chordM(d, keys[i]);
+            return s / keys.length;
+        }
+
         function reset() {
             data = { treble: freshClef(), bass: freshClef() };
             save();
         }
 
-        return { load, save, weightFor, recordOutcome, reset };
+        return { load, save, weightFor, recordOutcome, averageOver, reset };
     })();
 
     // ========================================================================
@@ -865,12 +949,18 @@ body { display: flex; flex-direction: column; }
             catch (_) { /* localStorage disabled */ }
         }
 
+        function studySet() {
+            const s = engineState.settings || {};
+            return { qualities: s.studyQualities, inversions: s.studyInversions };
+        }
+
         function emitStats() {
             if (!engineState.statsListener) return;
             const stats = getStats();
             const sig = stats.score + "|" + stats.streak + "|" +
                 stats.accuracy.toFixed(3) + "|" + stats.speed.toFixed(1) + "|" +
-                stats.tier + "|" + stats.totalJudged + "|" + stats.highScore;
+                stats.tier + "|" + stats.totalJudged + "|" + stats.highScore + "|" +
+                stats.expertise.toFixed(3);
             if (sig === engineState.lastStatsSig) return;
             engineState.lastStatsSig = sig;
             engineState.statsListener(stats);
@@ -918,6 +1008,7 @@ body { display: flex; flex-direction: column; }
             const prev = engineState.lastSpawned;
             const c = engineState.chordsMod.generateChord({
                 tier: engineState.tier, clef: clef, previous: prev,
+                study: studySet(),
                 weightFn: (key) => mastery.weightFor(clef, key),
             });
             c.id = engineState.nextId++;
@@ -1077,6 +1168,16 @@ body { display: flex; flex-direction: column; }
             if (newSettings.speed != null && newSettings.speed !== prev.speed) {
                 setSpeed(newSettings.speed);
             }
+            const studyChanged =
+                JSON.stringify(prev.studyQualities) !== JSON.stringify(newSettings.studyQualities) ||
+                JSON.stringify(prev.studyInversions) !== JSON.stringify(newSettings.studyInversions);
+            if (studyChanged) {
+                engineState.activeNotes = [];
+                engineState.lastSpawned = null;
+                engineState.lastStatsSig = "";
+                engineState.staff.render({ notes: [] });
+                emitStats();
+            }
         }
 
         function onStatsChange(fn) {
@@ -1096,6 +1197,10 @@ body { display: flex; flex-direction: column; }
         }
 
         function getStats() {
+            const clef = (engineState.settings && engineState.settings.clef) || "treble";
+            const keys = engineState.chordsMod
+                ? engineState.chordsMod.studyKeys(engineState.tier, clef, studySet())
+                : [];
             return {
                 score: engineState.score,
                 streak: engineState.streak,
@@ -1104,6 +1209,7 @@ body { display: flex; flex-direction: column; }
                 tier: engineState.tier,
                 totalJudged: engineState.totalJudged,
                 highScore: engineState.highScore,
+                expertise: mastery.averageOver(clef, keys),
             };
         }
 
@@ -1351,6 +1457,37 @@ body { display: flex; flex-direction: column; }
                 });
             }
 
+            // Study-set checkboxes (chord qualities + inversions).
+            function readStudyFromUI() {
+                const qualities = Array.prototype.map.call(
+                    document.querySelectorAll('[data-study-quality]:checked'), c => c.dataset.studyQuality);
+                const inversions = Array.prototype.map.call(
+                    document.querySelectorAll('[data-study-inv]:checked'), c => parseInt(c.dataset.studyInv, 10));
+                return { qualities: qualities, inversions: inversions };
+            }
+            function applyStudyToUI(study) {
+                document.querySelectorAll('[data-study-quality]').forEach((c) => {
+                    c.checked = study.qualities.indexOf(c.dataset.studyQuality) !== -1;
+                });
+                document.querySelectorAll('[data-study-inv]').forEach((c) => {
+                    c.checked = study.inversions.indexOf(parseInt(c.dataset.studyInv, 10)) !== -1;
+                });
+            }
+            function commitStudy() {
+                const st = readStudyFromUI();
+                const saved = settings.update({ studyQualities: st.qualities, studyInversions: st.inversions });
+                // Re-sync UI in case sanitize fell back to defaults (e.g. all unchecked).
+                applyStudyToUI({ qualities: saved.studyQualities, inversions: saved.studyInversions });
+                engine.applySettings(saved);
+            }
+            document.querySelectorAll('[data-study-quality], [data-study-inv]').forEach((c) => {
+                on(c, "change", commitStudy);
+            });
+            on($("#btn-study-default"), "click", () => {
+                applyStudyToUI({ qualities: ["maj", "min", "dim"], inversions: [0] });
+                commitStudy();
+            });
+
             on($("#btn-start"), "click", () => { engine.start(); setOverlay(true); });
             on($("#btn-pause"), "click", () => { engine.pause(); setOverlay(false); });
             on($("#btn-reset"), "click", () => { engine.reset(); clearSelection(); });
@@ -1386,10 +1523,22 @@ body { display: flex; flex-direction: column; }
                     r.checked = (r.value === notation);
                 });
                 applyNotation(notation);
+                applyStudyToUI({
+                    qualities: cur.studyQualities || ["maj", "min", "dim"],
+                    inversions: cur.studyInversions || [0],
+                });
             }
 
             setOverlay(false);
             queueMicrotask(() => { setOverlay(true); });
+        }
+
+        function levelLabel(p) {
+            if (p < 0.2) return "Novice";
+            if (p < 0.4) return "Beginner";
+            if (p < 0.6) return "Skilled";
+            if (p < 0.8) return "Advanced";
+            return "Expert";
         }
 
         function updateHud(stats) {
@@ -1402,6 +1551,10 @@ body { display: flex; flex-direction: column; }
             writeHud("hud-accuracy", "accuracy", accPct);
             writeHud("hud-speed", "speed", Math.round(stats.speed));
             writeHud("hud-tier", "tier", stats.tier);
+            const exp = stats.expertise != null ? stats.expertise : 0;
+            writeHud("hud-level", "level", levelLabel(exp));
+            const lvlEl = document.getElementById("hud-level");
+            if (lvlEl) lvlEl.title = "Expertise on your study set: " + Math.round(exp * 100) + "%";
             writeHud("hud-highscore", "highScore", stats.highScore != null ? stats.highScore : 0);
         }
 

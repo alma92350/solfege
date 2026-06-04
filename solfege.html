@@ -53,12 +53,13 @@ body { display: flex; flex-direction: column; }
 }
 .staff-svg { display: block; width: 100%; height: 100%; }
 .hud {
-    flex: 0 0 auto; display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--pad);
+    flex: 0 0 auto; display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--pad);
     background: var(--bg-elev); border-radius: var(--radius); padding: var(--pad);
 }
 .hud-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .hud-label { font-size: 0.72rem; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.08em; }
 .hud-value { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg); }
+.hud-value.hud-level { font-size: 1.05rem; color: var(--accent-hot); }
 .solfege-buttons { flex: 0 0 auto; display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--pad); }
 .solfege-btn {
     font-family: var(--font); font-size: clamp(1.1rem, 2.4vw, 1.6rem); font-weight: 700;
@@ -130,6 +131,13 @@ body { display: flex; flex-direction: column; }
 .settings-panel input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .settings-panel .field-row { display: flex; align-items: center; justify-content: space-between; }
 .settings-panel .field-unit { color: var(--fg-muted); font-size: 0.8rem; margin-left: 8px; }
+.settings-panel .study-hint { color: var(--fg-muted); font-size: 0.8rem; margin: 0 0 10px; }
+.settings-panel .study-group { margin-bottom: 10px; }
+.settings-panel .study-group-label {
+    display: block; color: var(--accent); font-size: 0.78rem;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px;
+}
+.settings-panel .study-names { display: grid; grid-template-columns: repeat(2, 1fr); }
 .settings-panel output {
     display: inline-block; font-variant-numeric: tabular-nums;
     color: var(--accent-hot); font-weight: 600; margin-left: 8px;
@@ -297,6 +305,7 @@ body { display: flex; flex-direction: column; }
             <div class="hud-cell"><span class="hud-label">Accuracy</span><span id="hud-accuracy" class="hud-value">--%</span></div>
             <div class="hud-cell"><span class="hud-label">Speed</span><span id="hud-speed" class="hud-value">--</span></div>
             <div class="hud-cell"><span class="hud-label">Tier</span><span id="hud-tier" class="hud-value">1</span></div>
+            <div class="hud-cell"><span class="hud-label">Level</span><span id="hud-level" class="hud-value hud-level" title="Expertise on your study set">Novice</span></div>
             <div class="hud-cell"><span class="hud-label">Best</span><span id="hud-highscore" class="hud-value">0</span></div>
         </section>
 
@@ -347,6 +356,24 @@ body { display: flex; flex-direction: column; }
             <label><input type="radio" name="notation" value="solfege" checked> Do Re Mi (Solfège)</label>
             <label><input type="radio" name="notation" value="letters"> A B C (Letters)</label>
         </fieldset>
+        <fieldset>
+            <legend>Study Set</legend>
+            <p class="study-hint">Pick which notes to practise. Tier sets the range; add or remove to match your goal.</p>
+            <div class="study-group">
+                <span class="study-group-label">Notes</span>
+                <div class="study-names">
+                    <label><input type="checkbox" data-study-name="DO"> <span class="study-name" data-name="DO">DO</span></label>
+                    <label><input type="checkbox" data-study-name="RE"> <span class="study-name" data-name="RE">RE</span></label>
+                    <label><input type="checkbox" data-study-name="MI"> <span class="study-name" data-name="MI">MI</span></label>
+                    <label><input type="checkbox" data-study-name="FA"> <span class="study-name" data-name="FA">FA</span></label>
+                    <label><input type="checkbox" data-study-name="SOL"> <span class="study-name" data-name="SOL">SOL</span></label>
+                    <label><input type="checkbox" data-study-name="LA"> <span class="study-name" data-name="LA">LA</span></label>
+                    <label><input type="checkbox" data-study-name="SI"> <span class="study-name" data-name="SI">SI</span></label>
+                </div>
+            </div>
+            <label><input type="checkbox" id="study-accidentals"> Include accidentals (&#9839; / &#9837;)</label>
+            <button id="btn-study-default" type="button">Use default</button>
+        </fieldset>
 
         <fieldset>
             <legend>Starting Difficulty Tier</legend>
@@ -391,10 +418,23 @@ body { display: flex; flex-direction: column; }
     // ========================================================================
     const settings = (function () {
         const SETTINGS_KEY = "solfege.settings.v1";
-        const DEFAULTS = Object.freeze({ clef: "treble", startTier: 1, answerLayout: "buttons", notation: "solfege", speed: 50 });
+        const ALL_NAMES = ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"];
+        const DEFAULTS = Object.freeze({
+            clef: "treble", startTier: 1, answerLayout: "buttons", notation: "solfege", speed: 50,
+            studyNames: ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"], studyAccidentals: false,
+        });
         let current = null;
 
         function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+        function sanitizeList(raw, allowed, fallback) {
+            if (!Array.isArray(raw)) return fallback.slice();
+            const out = [];
+            raw.forEach((v) => {
+                if (allowed.indexOf(v) !== -1 && out.indexOf(v) === -1) out.push(v);
+            });
+            return out.length ? out : fallback.slice();
+        }
 
         function sanitize(raw) {
             const out = clone(DEFAULTS);
@@ -410,6 +450,8 @@ body { display: flex; flex-direction: column; }
                 }
                 const sp = parseInt(raw.speed, 10);
                 if (Number.isFinite(sp)) out.speed = Math.min(250, Math.max(40, sp));
+                out.studyNames = sanitizeList(raw.studyNames, ALL_NAMES, DEFAULTS.studyNames);
+                out.studyAccidentals = !!raw.studyAccidentals;
             }
             return out;
         }
@@ -487,33 +529,32 @@ body { display: flex; flex-direction: column; }
             return C_MAJOR_PCS.includes(pc);
         }
 
-        function buildPool(tier, clef) {
-            const trebleCenter = [60, 72];
-            const bassCenter = [41, 53];
-            const center = clef === "bass" ? bassCenter : trebleCenter;
-            const centerLo = center[0], centerHi = center[1];
+        // Tier controls the vertical RANGE; the study set decides WHICH notes
+        // (names + whether accidentals appear) are drawn from that range.
+        function tierRange(tier, clef) {
+            const center = clef === "bass" ? [41, 53] : [60, 72];
+            if (tier <= 1) return [center[0], center[1]];
+            if (tier === 2) return [center[0] - 12, center[1] + 12];
+            if (tier === 3) return [center[0] - 12, center[1] + 12];
+            return [center[0] - 14, center[1] + 14];
+        }
 
-            let lo, hi, allowChromatic = false;
-            let allowedAccidentalPcs = new Set();
-
-            if (tier <= 1) { lo = centerLo; hi = centerHi; }
-            else if (tier === 2) { lo = centerLo - 12; hi = centerHi + 12; }
-            else if (tier === 3) {
-                lo = centerLo - 12; hi = centerHi + 12;
-                allowedAccidentalPcs = new Set([6, 10]);
-            } else {
-                lo = centerLo - 14; hi = centerHi + 14;
-                allowChromatic = true;
-            }
+        function buildPool(tier, clef, study) {
+            const range = tierRange(Math.max(1, Math.floor(tier || 1)), clef);
+            const lo = range[0], hi = range[1];
+            const names = study && study.names ? study.names : null;
+            const accidentals = !!(study && study.accidentals);
 
             const pool = [];
             for (let m = lo; m <= hi; m++) {
-                if (allowChromatic) pool.push(m);
-                else if (isInCMajor(m)) pool.push(m);
-                else if (allowedAccidentalPcs.size > 0) {
-                    const pc = ((m % 12) + 12) % 12;
-                    if (allowedAccidentalPcs.has(pc)) pool.push(m);
-                }
+                const pc = ((m % 12) + 12) % 12;
+                if (!NATURAL_PCS.has(pc) && !accidentals) continue;
+                if (names && !names.has(midiToSolfege(m))) continue;
+                pool.push(m);
+            }
+            // Never stall (e.g. nothing selected): fall back to C-major naturals.
+            if (pool.length === 0) {
+                for (let m = lo; m <= hi; m++) if (isInCMajor(m)) pool.push(m);
             }
             return pool;
         }
@@ -542,7 +583,7 @@ body { display: flex; flex-direction: column; }
             const radius = opts && typeof opts.radius === "number" ? opts.radius : null;
             const weightFn = opts && typeof opts.weightFn === "function" ? opts.weightFn : null;
             const t = Math.max(1, Math.floor(tier || 1));
-            const pool = buildPool(t, clef);
+            const pool = buildPool(t, clef, opts && opts.study);
             if (pool.length === 0) return buildNote(clef === "bass" ? 41 : 60, clef);
 
             const maxInt = maxIntervalSemitones(t);
@@ -586,11 +627,11 @@ body { display: flex; flex-direction: column; }
             return buildNote(pick, clef);
         }
 
-        function poolSteps(tier, clef) {
+        function poolSteps(tier, clef, study) {
             const t = Math.max(1, Math.floor(tier || 1));
             const seen = {};
             const out = [];
-            buildPool(t, clef).forEach((m) => {
+            buildPool(t, clef, study).forEach((m) => {
                 const s = midiToStaffStep(m, clef);
                 if (!seen[s]) { seen[s] = true; out.push(s); }
             });
@@ -664,6 +705,15 @@ body { display: flex; flex-direction: column; }
             return typeof v === "number" ? v : 0;
         }
 
+        // Mean per-note mastery (0..1) over a set of staff steps; unseen = 0.
+        function averageOver(clef, steps) {
+            if (!steps || !steps.length) return 0;
+            const d = forClef(clef);
+            let s = 0;
+            for (let i = 0; i < steps.length; i++) s += noteM(d, steps[i]);
+            return s / steps.length;
+        }
+
         // Selection weight: low mastery -> high weight (appears more often).
         function weightFor(clef, curStep, prevStep) {
             const d = forClef(clef);
@@ -709,7 +759,7 @@ body { display: flex; flex-direction: column; }
             save();
         }
 
-        return { load, save, getRadius, weightFor, recordOutcome, maybeExpand, reset };
+        return { load, save, getRadius, weightFor, recordOutcome, maybeExpand, averageOver, reset };
     })();
 
     // ========================================================================
@@ -1002,12 +1052,20 @@ body { display: flex; flex-direction: column; }
             catch (_) { /* localStorage disabled */ }
         }
 
+        function studySet() {
+            const s = engineState.settings || {};
+            const names = Array.isArray(s.studyNames) && s.studyNames.length
+                ? s.studyNames : engineState.notesMod.SOLFEGE_ORDER;
+            return { names: new Set(names), accidentals: !!s.studyAccidentals };
+        }
+
         function emitStats() {
             if (!engineState.statsListener) return;
             const stats = getStats();
             const sig = stats.score + "|" + stats.streak + "|" +
                 stats.accuracy.toFixed(3) + "|" + stats.speed.toFixed(1) + "|" +
-                stats.tier + "|" + stats.totalJudged + "|" + stats.highScore;
+                stats.tier + "|" + stats.totalJudged + "|" + stats.highScore + "|" +
+                stats.expertise.toFixed(3);
             if (sig === engineState.lastStatsSig) return;
             engineState.lastStatsSig = sig;
             engineState.statsListener(stats);
@@ -1056,6 +1114,7 @@ body { display: flex; flex-direction: column; }
             const n = engineState.notesMod.generateNote({
                 tier: engineState.tier, clef: clef, previous: prev,
                 radius: mastery.getRadius(clef),
+                study: studySet(),
                 weightFn: (s, p) => mastery.weightFor(clef, s, p),
             });
             n.id = engineState.nextId++;
@@ -1072,7 +1131,7 @@ body { display: flex; flex-direction: column; }
             if (!note) return;
             const clef = (engineState.settings && engineState.settings.clef) || "treble";
             mastery.recordOutcome(clef, note.staffStep, note.prevStep, hit);
-            mastery.maybeExpand(clef, engineState.notesMod.poolSteps(engineState.tier, clef));
+            mastery.maybeExpand(clef, engineState.notesMod.poolSteps(engineState.tier, clef, studySet()));
         }
 
         function step(dtSeconds) {
@@ -1217,6 +1276,16 @@ body { display: flex; flex-direction: column; }
             if (newSettings.speed != null && newSettings.speed !== prev.speed) {
                 setSpeed(newSettings.speed);
             }
+            const studyChanged =
+                JSON.stringify(prev.studyNames) !== JSON.stringify(newSettings.studyNames) ||
+                prev.studyAccidentals !== newSettings.studyAccidentals;
+            if (studyChanged) {
+                engineState.activeNotes = [];
+                engineState.lastSpawned = null;
+                engineState.lastStatsSig = "";
+                engineState.staff.render({ notes: [] });
+                emitStats();
+            }
         }
 
         function onStatsChange(fn) {
@@ -1236,6 +1305,10 @@ body { display: flex; flex-direction: column; }
         }
 
         function getStats() {
+            const clef = (engineState.settings && engineState.settings.clef) || "treble";
+            const steps = engineState.notesMod
+                ? engineState.notesMod.poolSteps(engineState.tier, clef, studySet())
+                : [];
             return {
                 score: engineState.score,
                 streak: engineState.streak,
@@ -1244,6 +1317,7 @@ body { display: flex; flex-direction: column; }
                 tier: engineState.tier,
                 totalJudged: engineState.totalJudged,
                 highScore: engineState.highScore,
+                expertise: mastery.averageOver(clef, steps),
             };
         }
 
@@ -1318,6 +1392,10 @@ body { display: flex; flex-direction: column; }
             document.querySelectorAll(".piano-key.black").forEach((k) => {
                 const subEl = k.querySelector(".piano-sub");
                 if (subEl) subEl.textContent = useLetters ? (k.dataset.letterSub || "") : (k.dataset.solSub || "");
+            });
+            document.querySelectorAll(".study-name").forEach((el) => {
+                const sol = el.dataset.name;
+                if (sol) el.textContent = nameFor(sol, notation);
             });
         }
 
@@ -1487,6 +1565,32 @@ body { display: flex; flex-direction: column; }
                 });
             }
 
+            // Study-set checkboxes (note names + accidentals).
+            const studyAccEl = $("#study-accidentals");
+            function readStudyFromUI() {
+                const names = Array.prototype.map.call(
+                    document.querySelectorAll('[data-study-name]:checked'), c => c.dataset.studyName);
+                return { names: names, accidentals: !!(studyAccEl && studyAccEl.checked) };
+            }
+            function applyStudyToUI(study) {
+                document.querySelectorAll('[data-study-name]').forEach((c) => {
+                    c.checked = study.names.indexOf(c.dataset.studyName) !== -1;
+                });
+                if (studyAccEl) studyAccEl.checked = !!study.accidentals;
+            }
+            function commitStudy() {
+                const st = readStudyFromUI();
+                const saved = settings.update({ studyNames: st.names, studyAccidentals: st.accidentals });
+                applyStudyToUI({ names: saved.studyNames, accidentals: saved.studyAccidentals });
+                engine.applySettings(saved);
+            }
+            document.querySelectorAll('[data-study-name]').forEach((c) => on(c, "change", commitStudy));
+            if (studyAccEl) on(studyAccEl, "change", commitStudy);
+            on($("#btn-study-default"), "click", () => {
+                applyStudyToUI({ names: ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"], accidentals: false });
+                commitStudy();
+            });
+
             on($("#btn-start"), "click", () => { engine.start(); setOverlay(true); });
             on($("#btn-pause"), "click", () => { engine.pause(); setOverlay(false); });
             on($("#btn-reset"), "click", () => { engine.reset(); });
@@ -1534,10 +1638,22 @@ body { display: flex; flex-direction: column; }
                     r.checked = (r.value === notation);
                 });
                 applyNotation(notation);
+                applyStudyToUI({
+                    names: cur.studyNames || ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"],
+                    accidentals: !!cur.studyAccidentals,
+                });
             }
 
             setOverlay(false);
             queueMicrotask(() => { setOverlay(true); });
+        }
+
+        function levelLabel(p) {
+            if (p < 0.2) return "Novice";
+            if (p < 0.4) return "Beginner";
+            if (p < 0.6) return "Skilled";
+            if (p < 0.8) return "Advanced";
+            return "Expert";
         }
 
         function updateHud(stats) {
@@ -1550,6 +1666,10 @@ body { display: flex; flex-direction: column; }
             writeHud("hud-accuracy", "accuracy", accPct);
             writeHud("hud-speed", "speed", Math.round(stats.speed));
             writeHud("hud-tier", "tier", stats.tier);
+            const exp = stats.expertise != null ? stats.expertise : 0;
+            writeHud("hud-level", "level", levelLabel(exp));
+            const lvlEl = document.getElementById("hud-level");
+            if (lvlEl) lvlEl.title = "Expertise on your study set: " + Math.round(exp * 100) + "%";
             writeHud("hud-highscore", "highScore", stats.highScore != null ? stats.highScore : 0);
         }
 
