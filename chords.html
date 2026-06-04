@@ -391,43 +391,60 @@ body { display: flex; flex-direction: column; }
         const INTERVALS = {
             maj: [0, 4, 7], min: [0, 3, 7], dim: [0, 3, 6], aug: [0, 4, 8],
         };
-        // Diatonic triads of C major, in scale order.
-        const DEGREES = [
-            { off: 0,  q: "maj" }, // I   - C
-            { off: 2,  q: "min" }, // ii  - D
-            { off: 4,  q: "min" }, // iii - E
-            { off: 5,  q: "maj" }, // IV  - F
-            { off: 7,  q: "maj" }, // V   - G
-            { off: 9,  q: "min" }, // vi  - A
-            { off: 11, q: "dim" }, // vii - B
+        // Diatonic triads of C major, keyed by the pitch-class of their root.
+        const SCALE = [
+            { pc: 0,  q: "maj" }, // I   - C (DO)
+            { pc: 2,  q: "min" }, // ii  - D (RE)
+            { pc: 4,  q: "min" }, // iii - E (MI)
+            { pc: 5,  q: "maj" }, // IV  - F (FA)
+            { pc: 7,  q: "maj" }, // V   - G (SOL)
+            { pc: 9,  q: "min" }, // vi  - A (LA)
+            { pc: 11, q: "dim" }, // vii - B (SI)
         ];
-        // Tier 4 spices things up with augmented triads on the tonic family.
-        const AUG_DEGREES = [
-            { off: 0, q: "aug" }, { off: 5, q: "aug" }, { off: 7, q: "aug" },
-        ];
+        const QUALITY_BY_PC = {};
+        SCALE.forEach((d) => { QUALITY_BY_PC[d.pc] = d.q; });
+        const AUG_ROOT_PCS = new Set([0, 5, 7]); // tonic / subdominant / dominant
 
-        function buildChord(rootMidi, quality, clef) {
+        // Difficulty knobs per tier. The full set of diatonic triads is available
+        // from tier 1; higher tiers add inversions, augmented chords, and a wider
+        // vertical window so chords climb across the whole staff.
+        function tierConfig(tier) {
+            if (tier <= 1) return { aug: false, inv: [0],       win: 6  };
+            if (tier === 2) return { aug: false, inv: [0, 1],    win: 9  };
+            if (tier === 3) return { aug: false, inv: [0, 1, 2], win: 11 };
+            return                  { aug: true,  inv: [0, 1, 2], win: 12 };
+        }
+
+        // Build one chord voicing. inversion 0 = root position, 1 = first, 2 = second.
+        function buildChord(rootMidi, quality, inversion, clef) {
             const ivs = INTERVALS[quality] || INTERVALS.maj;
-            const midis = ivs.map(i => rootMidi + i).sort((a, b) => a - b);
+            let midis;
+            if (inversion === 1) {
+                midis = [rootMidi + ivs[1], rootMidi + ivs[2], rootMidi + 12 + ivs[0]];
+            } else if (inversion === 2) {
+                midis = [rootMidi + ivs[2], rootMidi + 12 + ivs[0], rootMidi + 12 + ivs[1]];
+            } else {
+                midis = [rootMidi + ivs[0], rootMidi + ivs[1], rootMidi + ivs[2]];
+            }
+            midis.sort((a, b) => a - b);
             const steps = midis.map(m => music.midiToStaffStep(m, clef));
             const accidentals = midis.map(m => music.midiToAccidental(m));
             const root = music.midiToSolfege(rootMidi);
             return {
                 id: 0, x: 0, state: "pending",
-                root: root, quality: quality,
+                root: root, quality: quality, inversion: inversion,
                 notes: midis, steps: steps, accidentals: accidentals,
-                key: root + ":" + quality,
+                // Inversion is folded into the training key so every voicing gets
+                // drilled, even though the player only answers root + quality.
+                key: root + ":" + quality + ":" + inversion,
             };
         }
 
-        function tierDegrees(tier) {
-            let idx;
-            if (tier <= 1) idx = [0, 3, 4];
-            else if (tier === 2) idx = [0, 1, 2, 3, 4, 5];
-            else idx = [0, 1, 2, 3, 4, 5, 6];
-            const list = idx.map(i => DEGREES[i]);
-            if (tier >= 4) return list.concat(AUG_DEGREES);
-            return list;
+        function withinWindow(chord, win) {
+            for (let i = 0; i < chord.steps.length; i++) {
+                if (Math.abs(chord.steps[i]) > win) return false;
+            }
+            return true;
         }
 
         function generateChord(opts) {
@@ -435,16 +452,27 @@ body { display: flex; flex-direction: column; }
             const clef = opts && opts.clef;
             const previous = opts && opts.previous;
             const weightFn = opts && typeof opts.weightFn === "function" ? opts.weightFn : null;
-            const baseRoot = clef === "bass" ? 48 : 60;
-            const shifts = tier >= 3 ? (clef === "bass" ? [-1, 0] : [0, 1]) : [0];
+            const cfg = tierConfig(tier);
+            const loRoot = clef === "bass" ? 33 : 50;
+            const hiRoot = clef === "bass" ? 67 : 84;
 
             const candidates = [];
-            tierDegrees(tier).forEach((d) => {
-                shifts.forEach((sh) => {
-                    candidates.push(buildChord(baseRoot + d.off + 12 * sh, d.q, clef));
-                });
-            });
-            if (candidates.length === 0) return buildChord(baseRoot, "maj", clef);
+            for (let r = loRoot; r <= hiRoot; r++) {
+                const pc = ((r % 12) + 12) % 12;
+                const baseQ = QUALITY_BY_PC[pc];
+                if (!baseQ) continue; // not a diatonic root
+                const qualities = [baseQ];
+                if (cfg.aug && AUG_ROOT_PCS.has(pc)) qualities.push("aug");
+                for (let qi = 0; qi < qualities.length; qi++) {
+                    for (let ii = 0; ii < cfg.inv.length; ii++) {
+                        const chord = buildChord(r, qualities[qi], cfg.inv[ii], clef);
+                        if (withinWindow(chord, cfg.win)) candidates.push(chord);
+                    }
+                }
+            }
+            if (candidates.length === 0) {
+                return buildChord(clef === "bass" ? 50 : 60, "maj", 0, clef);
+            }
 
             let pool = candidates;
             if (previous && previous.key) {
@@ -470,19 +498,7 @@ body { display: flex; flex-direction: column; }
             return pool[Math.floor(Math.random() * pool.length)];
         }
 
-        // Distinct chord keys reachable in a tier (used to gauge mastery coverage).
-        function tierKeys(tier, clef) {
-            const baseRoot = clef === "bass" ? 48 : 60;
-            const seen = {};
-            const out = [];
-            tierDegrees(tier).forEach((d) => {
-                const k = music.midiToSolfege(baseRoot + d.off) + ":" + d.q;
-                if (!seen[k]) { seen[k] = true; out.push(k); }
-            });
-            return out;
-        }
-
-        return { generateChord, tierKeys };
+        return { generateChord };
     })();
 
     // ========================================================================
@@ -1009,15 +1025,13 @@ body { display: flex; flex-direction: column; }
 
         function submitGuess(guess) {
             if (!guess || !guess.root || !guess.quality) return;
-            const judgeX = engineState.staff.getJudgmentX();
-            const tol = engineState.staff.getJudgmentTolerance();
+            // No timing window: judge the leading pending chord (the one closest to
+            // the line), so the player can answer as soon as they recognize it.
             let target = null;
             for (let i = 0; i < engineState.activeNotes.length; i++) {
                 const n = engineState.activeNotes[i];
                 if (n.state !== "pending") continue;
-                if (Math.abs(n.x - judgeX) <= tol) {
-                    if (target === null || n.x < target.x) target = n;
-                }
+                if (target === null || n.x < target.x) target = n;
             }
             if (!target) return;
 

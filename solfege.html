@@ -1166,15 +1166,13 @@ body { display: flex; flex-direction: column; }
 
         function submitGuess(guess) {
             if (!guess) return;
-            const judgeX = engineState.staff.getJudgmentX();
-            const tol = engineState.staff.getJudgmentTolerance();
+            // No timing window: judge the leading pending note (the one closest to
+            // the line), so the player can answer as soon as they recognize it.
             let target = null;
             for (let i = 0; i < engineState.activeNotes.length; i++) {
                 const n = engineState.activeNotes[i];
                 if (n.state !== "pending") continue;
-                if (Math.abs(n.x - judgeX) <= tol) {
-                    if (target === null || n.x < target.x) target = n;
-                }
+                if (target === null || n.x < target.x) target = n;
             }
             if (!target) return;
 
