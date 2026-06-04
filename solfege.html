@@ -34,6 +34,12 @@ body { display: flex; flex-direction: column; }
     background: var(--bg-elev); border-bottom: 1px solid #2a2f37;
 }
 .app-header h1 { font-size: 1.2rem; margin: 0; letter-spacing: 0.04em; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.app-link {
+    color: var(--accent); text-decoration: none; font-size: 0.95rem;
+    border: 1px solid #3a414c; border-radius: var(--radius); padding: 8px 16px;
+}
+.app-link:hover { background: #2a313b; border-color: var(--accent); }
 .settings-toggle {
     background: transparent; color: var(--fg); border: 1px solid #3a414c;
     border-radius: var(--radius); padding: 8px 16px; cursor: pointer; font-size: 0.95rem;
@@ -258,7 +264,10 @@ body { display: flex; flex-direction: column; }
 <body>
     <header class="app-header">
         <h1>Solfege Trainer</h1>
-        <button id="settings-toggle" class="settings-toggle" aria-label="Toggle settings" aria-controls="settings-panel" aria-expanded="false">Settings</button>
+        <div class="header-actions">
+            <a class="app-link" href="chords.html">Chords &rarr;</a>
+            <button id="settings-toggle" class="settings-toggle" aria-label="Toggle settings" aria-controls="settings-panel" aria-expanded="false">Settings</button>
+        </div>
     </header>
 
     <main class="app-main">
@@ -300,11 +309,11 @@ body { display: flex; flex-direction: column; }
             <button class="piano-key white" data-solfege="SOL" aria-label="SOL (G)"><span class="piano-label">SOL</span><span class="piano-sub">G</span></button>
             <button class="piano-key white" data-solfege="LA"  aria-label="LA (A)"><span class="piano-label">LA</span><span class="piano-sub">A</span></button>
             <button class="piano-key white" data-solfege="SI"  aria-label="SI (B)"><span class="piano-label">SI</span><span class="piano-sub">B</span></button>
-            <button class="piano-key black bk-1" data-solfege="DO"  aria-label="DO sharp (C#)"><span class="piano-sub">DO♯</span></button>
-            <button class="piano-key black bk-2" data-solfege="RE"  aria-label="RE sharp (D#)"><span class="piano-sub">RE♯</span></button>
-            <button class="piano-key black bk-3" data-solfege="FA"  aria-label="FA sharp (F#)"><span class="piano-sub">FA♯</span></button>
-            <button class="piano-key black bk-4" data-solfege="SOL" aria-label="SOL sharp (G#)"><span class="piano-sub">SOL♯</span></button>
-            <button class="piano-key black bk-5" data-solfege="SI"  aria-label="SI flat (B♭)"><span class="piano-sub">SI♭</span></button>
+            <button class="piano-key black bk-1" data-solfege="DO"  data-sol-sub="DO♯" data-letter-sub="C♯" aria-label="DO sharp (C#)"><span class="piano-sub">DO♯</span></button>
+            <button class="piano-key black bk-2" data-solfege="RE"  data-sol-sub="RE♯" data-letter-sub="D♯" aria-label="RE sharp (D#)"><span class="piano-sub">RE♯</span></button>
+            <button class="piano-key black bk-3" data-solfege="FA"  data-sol-sub="FA♯" data-letter-sub="F♯" aria-label="FA sharp (F#)"><span class="piano-sub">FA♯</span></button>
+            <button class="piano-key black bk-4" data-solfege="SOL" data-sol-sub="SOL♯" data-letter-sub="G♯" aria-label="SOL sharp (G#)"><span class="piano-sub">SOL♯</span></button>
+            <button class="piano-key black bk-5" data-solfege="SI"  data-sol-sub="SI♭" data-letter-sub="B♭" aria-label="SI flat (B♭)"><span class="piano-sub">SI♭</span></button>
         </section>
     </main>
 
@@ -323,6 +332,11 @@ body { display: flex; flex-direction: column; }
             <legend>Answer Layout</legend>
             <label><input type="radio" name="answer-layout" value="buttons" checked> Solfège Buttons</label>
             <label><input type="radio" name="answer-layout" value="piano"> Piano Keyboard</label>
+        </fieldset>
+        <fieldset>
+            <legend>Note Names</legend>
+            <label><input type="radio" name="notation" value="solfege" checked> Do Re Mi (Solfège)</label>
+            <label><input type="radio" name="notation" value="letters"> A B C (Letters)</label>
         </fieldset>
 
         <fieldset>
@@ -362,7 +376,7 @@ body { display: flex; flex-direction: column; }
     // ========================================================================
     const settings = (function () {
         const SETTINGS_KEY = "solfege.settings.v1";
-        const DEFAULTS = Object.freeze({ clef: "treble", startTier: 1, answerLayout: "buttons" });
+        const DEFAULTS = Object.freeze({ clef: "treble", startTier: 1, answerLayout: "buttons", notation: "solfege" });
         let current = null;
 
         function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -375,6 +389,9 @@ body { display: flex; flex-direction: column; }
                 if (Number.isFinite(t) && t >= 1) out.startTier = t;
                 if (raw.answerLayout === "buttons" || raw.answerLayout === "piano") {
                     out.answerLayout = raw.answerLayout;
+                }
+                if (raw.notation === "solfege" || raw.notation === "letters") {
+                    out.notation = raw.notation;
                 }
             }
             return out;
@@ -1212,6 +1229,12 @@ body { display: flex; flex-direction: column; }
             DO: "1 · D", RE: "2 · R", MI: "3 · M", FA: "4 · F",
             SOL: "5 · G", LA: "6 · L", SI: "7 · T",
         };
+        const LETTER_OF = {
+            DO: "C", RE: "D", MI: "E", FA: "F", SOL: "G", LA: "A", SI: "B",
+        };
+        function nameFor(label, notation) {
+            return notation === "letters" ? (LETTER_OF[label] || label) : label;
+        }
         const HIGH_SCORE_KEY = "solfege.highScore";
 
         const uiState = {
@@ -1223,7 +1246,7 @@ body { display: flex; flex-direction: column; }
         function $(sel) { return document.querySelector(sel); }
         function on(el, ev, fn) { if (el) el.addEventListener(ev, fn); }
 
-        function decorateButtons() {
+        function decorateButtons(notation) {
             document.querySelectorAll(".solfege-btn").forEach((btn) => {
                 const label = btn.dataset.solfege;
                 if (!label) return;
@@ -1231,7 +1254,7 @@ body { display: flex; flex-direction: column; }
                 if (hint && !btn.querySelector(".solfege-key")) {
                     const name = document.createElement("span");
                     name.className = "solfege-name";
-                    name.textContent = label;
+                    name.textContent = nameFor(label, notation);
                     const key = document.createElement("span");
                     key.className = "solfege-key";
                     key.textContent = hint;
@@ -1240,6 +1263,27 @@ body { display: flex; flex-direction: column; }
                     btn.appendChild(key);
                     btn.setAttribute("aria-label", label + " (keys " + hint + ")");
                 }
+            });
+        }
+
+        // Relabel solfège buttons + piano keys for the chosen note-name system.
+        function applyNotation(notation) {
+            const useLetters = notation === "letters";
+            document.querySelectorAll(".solfege-btn").forEach((btn) => {
+                const sol = btn.dataset.solfege;
+                const nameEl = btn.querySelector(".solfege-name");
+                if (sol && nameEl) nameEl.textContent = nameFor(sol, notation);
+            });
+            document.querySelectorAll(".piano-key.white").forEach((k) => {
+                const sol = k.dataset.solfege;
+                const labelEl = k.querySelector(".piano-label");
+                const subEl = k.querySelector(".piano-sub");
+                if (labelEl) labelEl.textContent = useLetters ? LETTER_OF[sol] : sol;
+                if (subEl) subEl.textContent = useLetters ? sol : LETTER_OF[sol];
+            });
+            document.querySelectorAll(".piano-key.black").forEach((k) => {
+                const subEl = k.querySelector(".piano-sub");
+                if (subEl) subEl.textContent = useLetters ? (k.dataset.letterSub || "") : (k.dataset.solSub || "");
             });
         }
 
@@ -1307,7 +1351,9 @@ body { display: flex; flex-direction: column; }
             uiState.engineMod = engine;
             uiState.settingsMod = settings;
 
-            decorateButtons();
+            const curNotation = (settings.get ? settings.get().notation : "solfege") || "solfege";
+            decorateButtons(curNotation);
+            applyNotation(curNotation);
 
             document.querySelectorAll(".solfege-btn, .piano-key").forEach((btn) => {
                 on(btn, "click", () => {
@@ -1325,6 +1371,16 @@ body { display: flex; flex-direction: column; }
                     const layout = radio.value;
                     settings.update({ answerLayout: layout });
                     setAnswerLayout(layout);
+                });
+            });
+
+            // Note-name notation radios
+            document.querySelectorAll('input[name="notation"]').forEach((radio) => {
+                on(radio, "change", () => {
+                    if (!radio.checked) return;
+                    const notation = radio.value;
+                    settings.update({ notation: notation });
+                    applyNotation(notation);
                 });
             });
 
@@ -1427,6 +1483,11 @@ body { display: flex; flex-direction: column; }
                     r.checked = (r.value === layout);
                 });
                 setAnswerLayout(layout);
+                const notation = cur.notation || "solfege";
+                document.querySelectorAll('input[name="notation"]').forEach((r) => {
+                    r.checked = (r.value === notation);
+                });
+                applyNotation(notation);
             }
 
             setOverlay(false);
