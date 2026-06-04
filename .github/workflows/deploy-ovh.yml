@@ -23,7 +23,7 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}        # e.g. ftp.cluster0XX.hosting.ovh.net
           username: ${{ secrets.FTP_USERNAME }}    # your OVH FTP login
           password: ${{ secrets.FTP_PASSWORD }}    # your OVH FTP password
-          protocol: ftps                           # OVH supports explicit FTPS; use "ftp" if FTPS is unavailable
+          protocol: ftp                            # OVH server reported FTPS unsupported ("500 This security scheme is not implemented")
           # Remote web root on OVH shared hosting. Common values: "/www/" or "/".
           # Override by setting an FTP_SERVER_DIR secret, otherwise defaults to /www/.
           server-dir: ${{ secrets.FTP_SERVER_DIR || '/www/' }}
