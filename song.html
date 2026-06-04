@@ -399,6 +399,7 @@ body { display: flex; flex-direction: column; }
     </aside>
 
     <script src="shared/music.js"></script>
+    <script src="shared/songs.js"></script>
     <script>
 /*
  * Solfege Trainer — Song mode. Standalone single-file build.
@@ -491,8 +492,22 @@ body { display: flex; flex-direction: column; }
         const midiToSolfege = __m.midiToSolfege;
         const midiToAccidental = __m.midiToAccidental;
         const midiToStaffStep = __m.midiToStaffStep;
+        const spellNote = __m.spellNote;
 
-        function buildNote(midi, clef) {
+        // With a key, spell the note diatonically (so flat-key songs read on the
+        // right line, named correctly, with the key signature carrying the
+        // accidental). Without one, fall back to the chromatic fixed-Do spelling.
+        function buildNote(midi, clef, key) {
+            if (key) {
+                const s = spellNote(midi, key, clef);
+                return {
+                    id: 0, midi,
+                    solfege: s.solfege,
+                    accidental: s.accidental,
+                    staffStep: s.staffStep,
+                    x: 0, state: "pending",
+                };
+            }
             return {
                 id: 0, midi,
                 solfege: midiToSolfege(midi),
@@ -506,86 +521,12 @@ body { display: flex; flex-direction: column; }
     })();
 
     // ========================================================================
-    // songs module (the melody library)
+    // songs module — the melody library lives in shared/songs.js (single source
+    // of truth, covered by the test suite).
     // ========================================================================
-    //
-    // Each song is a list of melody notes given as MIDI numbers, in order.
-    // Middle C = 60 (= DO). `lyrics` (optional) lines up syllable-for-note.
-    const songs = (function () {
-        const LIBRARY = [
-            {
-                id: "vapor-trail",
-                title: "Vapor Trail — ひこうき雲 (Hikōki-gumo)",
-                composer: "Yumi Arai / Matsutoya · The Wind Rises",
-                keyName: "E♭ major",
-                clef: "treble",
-                // The E♭-major intro: a rolling eighth-note arpeggio figure that
-                // climbs and falls through each bar's chord (E♭ · A♭ · Gm7 · A♭).
-                // E♭4=63 G4=67 B♭4=70 A♭4=68 C5=72 E♭5=75 G5=79 B♭5=82 D5=74 F5=77
-                notes: [
-                    // Bar 1 — E♭ chord
-                    63, 67, 70, 67, 63, 67, 70, 67,
-                    // Bar 2 — A♭ chord
-                    68, 72, 75, 72, 68, 72, 75, 72,
-                    // Bar 3 — Gm7 (reaches up to the high F)
-                    67, 70, 74, 77, 74, 70, 74, 70,
-                    // Bar 4 — A♭ rising to the top, then settle
-                    68, 72, 75, 79, 82, 79, 75, 72,
-                ],
-            },
-            {
-                id: "twinkle",
-                title: "Twinkle, Twinkle, Little Star",
-                composer: "Trad. (Ah! vous dirai-je, maman)",
-                keyName: "C major",
-                clef: "treble",
-                // C C G G A A G | F F E E D D C
-                notes: [60, 60, 67, 67, 69, 69, 67, 65, 65, 64, 64, 62, 62, 60],
-                lyrics: ["Twin", "kle", "twin", "kle", "lit", "tle", "star",
-                         "how", "I", "won", "der", "what", "you", "are"],
-            },
-            {
-                id: "ode-to-joy",
-                title: "Ode to Joy",
-                composer: "Beethoven · Symphony No. 9",
-                keyName: "C major",
-                clef: "treble",
-                // E E F G G F E D C C D E E D D
-                notes: [64, 64, 65, 67, 67, 65, 64, 62, 60, 60, 62, 64, 64, 62, 62],
-            },
-            {
-                id: "frere-jacques",
-                title: "Frère Jacques",
-                composer: "Trad. French round",
-                keyName: "C major",
-                clef: "treble",
-                // C D E C | C D E C | E F G | E F G | G A G F E C | G A G F E C | C G C | C G C
-                notes: [
-                    60, 62, 64, 60, 60, 62, 64, 60,
-                    64, 65, 67, 64, 65, 67,
-                    67, 69, 67, 65, 64, 60, 67, 69, 67, 65, 64, 60,
-                    60, 55, 60, 60, 55, 60,
-                ],
-            },
-            {
-                id: "ode-bass",
-                title: "Ode to Joy (Bass clef)",
-                composer: "Beethoven · for Clef de Fa practice",
-                keyName: "C major",
-                clef: "bass",
-                notes: [52, 52, 53, 55, 55, 53, 52, 50, 48, 48, 50, 52, 52, 50, 50],
-            },
-        ];
-
-        function byId(id) {
-            for (let i = 0; i < LIBRARY.length; i++) {
-                if (LIBRARY[i].id === id) return LIBRARY[i];
-            }
-            return LIBRARY[0];
-        }
-
-        return { LIBRARY, byId };
-    })();
+    const songs = (typeof window !== "undefined" && window.Solfege && window.Solfege.songs)
+        ? window.Solfege.songs : null;
+    if (!songs) throw new Error("shared/songs.js must load before this script");
 
     // ========================================================================
     // staff module (SVG renderer)
@@ -596,7 +537,7 @@ body { display: flex; flex-direction: column; }
         const SVG_NS = "http://www.w3.org/2000/svg";
 
         const state = {
-            svg: null, clef: "treble", showLyrics: false,
+            svg: null, clef: "treble", showLyrics: false, keySig: [],
             width: 0, height: 0, staffLineGap: 12, middleY: 0, spawnX: 0,
             staticLayer: null, notesLayer: null,
             noteEls: new Map(),
@@ -671,6 +612,25 @@ body { display: flex; flex-direction: column; }
             return g;
         }
 
+        // The key signature: the run of sharps/flats drawn just after the clef.
+        function makeKeySignature(sig) {
+            const g = el("g", { class: "staff-clef" });
+            const startX = state.clef === "bass" ? 40 : 46;
+            const dx = Math.max(9, state.staffLineGap * 0.85);
+            for (let i = 0; i < sig.length; i++) {
+                const a = sig[i];
+                const t = el("text", {
+                    class: "note-accidental",
+                    x: startX + i * dx,
+                    y: yForStep(a.step) + state.staffLineGap * 0.32,
+                    "text-anchor": "middle",
+                });
+                t.textContent = a.type === "b" ? "♭" : "♯";
+                g.appendChild(t);
+            }
+            return g;
+        }
+
         function drawStatic() {
             clearLayer(state.staticLayer);
             const xLeft = 8;
@@ -682,6 +642,9 @@ body { display: flex; flex-direction: column; }
                 }));
             }
             state.staticLayer.appendChild(makeClef(state.clef));
+            if (state.keySig && state.keySig.length) {
+                state.staticLayer.appendChild(makeKeySignature(state.keySig));
+            }
             const topY = yForStep(8);
             const botY = yForStep(-8);
             state.staticLayer.appendChild(el("line", {
@@ -792,6 +755,11 @@ body { display: flex; flex-direction: column; }
             state.noteEls.clear();
         }
 
+        function setKeySignature(sig) {
+            state.keySig = Array.isArray(sig) ? sig : [];
+            drawStatic();
+        }
+
         function render(stateSnapshot) {
             const notesArr = stateSnapshot && stateSnapshot.notes ? stateSnapshot.notes : [];
             const seen = new Set();
@@ -819,7 +787,7 @@ body { display: flex; flex-direction: column; }
         function getJudgmentX() { return JUDGMENT_X; }
         function getJudgmentTolerance() { return JUDGMENT_TOLERANCE; }
 
-        return { init, setClef, setShowLyrics, render, getSpawnX, getJudgmentX, getJudgmentTolerance,
+        return { init, setClef, setShowLyrics, setKeySignature, render, getSpawnX, getJudgmentX, getJudgmentTolerance,
                  JUDGMENT_X, JUDGMENT_TOLERANCE };
     })();
 
@@ -836,7 +804,7 @@ body { display: flex; flex-direction: column; }
 
         const engineState = {
             staff: null, notesMod: null, settings: null,
-            song: null, sequence: [], lyrics: null,
+            song: null, sequence: [], lyrics: null, key: null,
             running: false, rafId: 0, lastFrameMs: 0,
             nextId: 1, activeNotes: [], seqIndex: 0,
             speed: BASE_SPEED,
@@ -927,7 +895,7 @@ body { display: flex; flex-direction: column; }
             const clef = (engineState.settings && engineState.settings.clef) || "treble";
             const idx = engineState.seqIndex % seq.length;
             const midi = seq[idx];
-            const n = engineState.notesMod.buildNote(midi, clef);
+            const n = engineState.notesMod.buildNote(midi, clef, engineState.key);
             n.id = engineState.nextId++;
             n.x = engineState.staff.getSpawnX();
             n.state = "pending";
@@ -991,7 +959,19 @@ body { display: flex; flex-direction: column; }
             engineState.song = song;
             engineState.sequence = (song && song.notes) ? song.notes.slice() : [];
             engineState.lyrics = (song && song.lyrics) ? song.lyrics : null;
+            const M = window.Solfege && window.Solfege.music;
+            engineState.key = (M && song && song.key) ? M.keyFromName(song.key) : null;
+            applyKeySignature();
             return song;
+        }
+
+        // Draw the current song's key signature for the active clef.
+        function applyKeySignature() {
+            if (!engineState.staff || typeof engineState.staff.setKeySignature !== "function") return;
+            const M = window.Solfege && window.Solfege.music;
+            const clef = (engineState.settings && engineState.settings.clef) || "treble";
+            const sig = (M && engineState.key) ? M.keySignature(engineState.key, clef) : [];
+            engineState.staff.setKeySignature(sig);
         }
 
         function init(opts) {
@@ -1095,6 +1075,7 @@ body { display: flex; flex-direction: column; }
                 if (engineState.staff && typeof engineState.staff.setClef === "function") {
                     engineState.staff.setClef(newSettings.clef);
                 }
+                applyKeySignature(); // key-sig positions differ per clef
                 engineState.staff.render({ notes: [] });
             }
             if (newSettings.speed != null && newSettings.speed !== prev.speed) {

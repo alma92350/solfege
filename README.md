@@ -32,11 +32,19 @@ python3 -m http.server
 app.html / chords.html / song.html   trainer pages (HTML + inlined CSS/JS)
 index.html                           landing page
 solfege.html                         generated alias of app.html
-shared/music.js                      pitch / music-theory helpers (single source
-                                     of truth, loaded by every trainer page)
+shared/music.js                      pitch / music-theory helpers, incl. key
+                                     signatures + diatonic spelling (single
+                                     source of truth, loaded by every page)
+shared/songs.js                      Song-mode melody library
 build.js                             regenerates solfege.html from app.html
 test/                                node --test suites
 ```
+
+Song mode is **key-aware**: each song declares its key, so the melody is spelled
+diatonically (e.g. Vapor Trail in E♭ major reads on the E/A/B lines under a
+three-flat key signature and is named MI/LA/SI — not respelled as sharps) and the
+key signature is drawn on the staff. The spelling logic lives in `shared/music.js`
+(`makeKey`, `keyFromName`, `spellNote`, `keySignature`) and is covered by tests.
 
 Each trainer page is otherwise self-contained (its CSS and game/engine code are
 inlined so it runs without a server). The pure music-theory logic — pitch to

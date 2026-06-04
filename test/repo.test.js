@@ -24,6 +24,13 @@ test("every trainer page loads the shared music module", () => {
     }
 });
 
+test("song.html loads the shared song library instead of inlining it", () => {
+    const src = read("song.html");
+    assert.match(src, /<script src="shared\/songs\.js">/);
+    assert.doesNotMatch(src, /id:\s*"vapor-trail"/,
+        "song.html should not re-inline the song library (see shared/songs.js)");
+});
+
 test("no trainer page re-inlines the shared pitch helpers", () => {
     // Guards against a future edit copy-pasting the logic back in and letting it
     // drift from shared/music.js (the tested source of truth).
