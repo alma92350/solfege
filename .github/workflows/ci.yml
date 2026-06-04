@@ -1,0 +1,28 @@
+name: CI
+
+# Runs the test suite and verifies generated files are in sync.
+# Separate from the deploy workflow so tests gate code without touching delivery.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Verify solfege.html is in sync with app.html
+        run: node build.js --check
+
+      - name: Run tests
+        run: node --test
