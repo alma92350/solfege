@@ -1,0 +1,35 @@
+name: Deploy to OVH via FTP
+
+# Deploys the static site to OVH web hosting over FTP/FTPS.
+# Runs on every push to the default branch, and can be triggered manually.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  ftp-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to OVH
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          # Configure these as repository secrets:
+          #   Settings > Secrets and variables > Actions > New repository secret
+          server: ${{ secrets.FTP_SERVER }}        # e.g. ftp.cluster0XX.hosting.ovh.net
+          username: ${{ secrets.FTP_USERNAME }}    # your OVH FTP login
+          password: ${{ secrets.FTP_PASSWORD }}    # your OVH FTP password
+          protocol: ftps                           # OVH supports explicit FTPS; use "ftp" if FTPS is unavailable
+          # Remote web root on OVH shared hosting. Common values: "/www/" or "/".
+          # Override by setting an FTP_SERVER_DIR secret, otherwise defaults to /www/.
+          server-dir: ${{ secrets.FTP_SERVER_DIR || '/www/' }}
+          # Upload only the built site files, not repo metadata.
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.github/**
+            README.md
