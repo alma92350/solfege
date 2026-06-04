@@ -1,0 +1,12 @@
+{
+  "name": "solfege-trainer",
+  "version": "1.0.0",
+  "description": "Browser-based sight-reading trainer (notes, chords, songs).",
+  "private": true,
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test",
+    "check": "node build.js --check && node --test"
+  },
+  "license": "MIT"
+}

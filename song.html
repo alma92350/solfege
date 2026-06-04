@@ -398,6 +398,7 @@ body { display: flex; flex-direction: column; }
         </fieldset>
     </aside>
 
+    <script src="shared/music.js"></script>
     <script>
 /*
  * Solfege Trainer — Song mode. Standalone single-file build.
@@ -481,35 +482,15 @@ body { display: flex; flex-direction: column; }
     // notes module (pitch helpers + note builder)
     // ========================================================================
     const notes = (function () {
-        const SOLFEGE_ORDER = ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"];
-        const PC_TO_SOLFEGE = [
-            "DO", "DO", "RE", "RE", "MI", "FA", "FA", "SOL", "SOL", "LA", "LA", "SI",
-        ];
-        const NATURAL_PCS = new Set([0, 2, 4, 5, 7, 9, 11]);
-        const FLAT_PCS = new Set([10]);
-
-        function midiToSolfege(midi) {
-            const pc = ((midi % 12) + 12) % 12;
-            if (pc === 10) return "SI";
-            return PC_TO_SOLFEGE[pc];
-        }
-
-        function midiToAccidental(midi) {
-            const pc = ((midi % 12) + 12) % 12;
-            if (NATURAL_PCS.has(pc)) return "";
-            if (FLAT_PCS.has(pc)) return "b";
-            return "#";
-        }
-
-        function midiToStaffStep(midi, clef) {
-            const LETTER_IDX = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 6, 6];
-            const pc = ((midi % 12) + 12) % 12;
-            const octave = Math.floor(midi / 12) - 1;
-            const letterIdx = LETTER_IDX[pc];
-            const diatonic = octave * 7 + letterIdx;
-            const middle = clef === "bass" ? 22 : 34;
-            return diatonic - middle;
-        }
+        // Pure pitch/theory helpers live in shared/music.js (single source of
+        // truth, covered by the test suite).
+        const __m = (typeof window !== "undefined" && window.Solfege && window.Solfege.music)
+            ? window.Solfege.music : null;
+        if (!__m) throw new Error("shared/music.js must load before this script");
+        const SOLFEGE_ORDER = __m.SOLFEGE_ORDER;
+        const midiToSolfege = __m.midiToSolfege;
+        const midiToAccidental = __m.midiToAccidental;
+        const midiToStaffStep = __m.midiToStaffStep;
 
         function buildNote(midi, clef) {
             return {

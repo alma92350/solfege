@@ -27,9 +27,13 @@ jobs:
           # Remote web root on OVH shared hosting. Common values: "/www/" or "/".
           # Override by setting an FTP_SERVER_DIR secret, otherwise defaults to /www/.
           server-dir: ${{ secrets.FTP_SERVER_DIR || '/www/' }}
-          # Upload only the built site files, not repo metadata.
+          # Upload only the built site files, not repo metadata or dev tooling.
           exclude: |
             **/.git*
             **/.git*/**
             **/.github/**
+            **/node_modules/**
+            **/test/**
             README.md
+            package.json
+            build.js
