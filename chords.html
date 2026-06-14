@@ -876,13 +876,15 @@ body { display: flex; flex-direction: column; }
         const SPEED_MIN = 40;
         const SPEED_MAX = 250;
         const WINDOW_SIZE = 20;
-        const MIN_WINDOW_TO_ACT = 10;
-        const ACC_UP = 0.95;
-        const ACC_DOWN = 0.70;
         const TIER_FLOOR = 1;
         const TIER_CAP = 4;
         const MIN_NOTE_GAP_PX = 150;
         const HIGH_SCORE_KEY = "chords.highScore";
+        // Progression is mastery-gated, not accuracy-gated. The scroll speed only
+        // rises once EVERY chord in the current study set is fully mastered.
+        const LEVEL_ALPHA = 0.25;     // per-level EMA learning rate
+        const LEVEL_MASTERED = 0.85;  // per-chord mastery that counts as "100%"
+        const SPEED_STEP = 1.12;      // speed multiplier per mastery milestone
 
         const engineState = {
             staff: null, chordsMod: null, settings: null,
@@ -891,6 +893,7 @@ body { display: flex; flex-direction: column; }
             speed: BASE_SPEED, tier: 1,
             score: 0, streak: 0, highScore: 0, totalJudged: 0, totalHits: 0,
             window: [],
+            levelMastery: {},
             timeSinceLastSpawn: 999,
             statsListener: null, judgmentListener: null,
             lastStatsSig: "",
@@ -958,20 +961,43 @@ body { display: flex; flex-direction: column; }
             if (engineState.judgmentListener) engineState.judgmentListener(ev);
         }
 
-        function adjustDifficulty() {
-            if (engineState.window.length < MIN_WINDOW_TO_ACT) return;
-            const acc = rollingAccuracy();
-            let tierChanged = false;
-            if (acc >= ACC_UP) {
-                const newSpeed = Math.min(SPEED_MAX, engineState.speed * 1.05);
-                if (newSpeed !== engineState.speed) engineState.speed = newSpeed;
-                if (engineState.tier < TIER_CAP) { engineState.tier += 1; tierChanged = true; }
-            } else if (acc < ACC_DOWN) {
-                const newSpeed = Math.max(SPEED_MIN, engineState.speed * 0.9);
-                if (newSpeed !== engineState.speed) engineState.speed = newSpeed;
-                if (engineState.tier > TIER_FLOOR) { engineState.tier -= 1; tierChanged = true; }
+        // The full set of chords the player must learn at the current scope:
+        // every distinct training key in the active tier window + study set.
+        function learnKeys() {
+            const clef = (engineState.settings && engineState.settings.clef) || "treble";
+            return engineState.chordsMod.studyKeys(engineState.tier, clef, studySet());
+        }
+
+        // Per-level (ephemeral) mastery, reset whenever the scope or speed changes.
+        // Separate from the persistent training memory so the player must re-prove
+        // mastery each time the difficulty steps up.
+        function levelBump(key, hit) {
+            const c = engineState.levelMastery[key] || 0;
+            engineState.levelMastery[key] = hit ? c + LEVEL_ALPHA * (1 - c) : c * (1 - LEVEL_ALPHA);
+        }
+
+        function levelAllMastered() {
+            const keys = learnKeys();
+            if (!keys.length) return false;
+            for (let i = 0; i < keys.length; i++) {
+                if ((engineState.levelMastery[keys[i]] || 0) < LEVEL_MASTERED) return false;
             }
-            if (tierChanged) engineState.window = [];
+            return true;
+        }
+
+        // Mastery-gated progression: never speeds up on raw accuracy. The player
+        // must first learn EVERY chord in the current scope to full mastery; only
+        // then do we advance — introducing new chords (tier) until the whole scope
+        // is covered, and only after that increasing the scroll speed.
+        function maybeAdvance() {
+            if (!levelAllMastered()) return;
+            if (engineState.tier < TIER_CAP) {
+                engineState.tier += 1;                                  // introduce new chords
+            } else {
+                engineState.speed = clampSpeed(engineState.speed * SPEED_STEP); // then go faster
+            }
+            engineState.levelMastery = {};                             // re-prove at the new level
+            engineState.window = [];
         }
 
         function spawnCooldownSeconds() {
@@ -1011,6 +1037,7 @@ body { display: flex; flex-direction: column; }
             if (!chord) return;
             const clef = (engineState.settings && engineState.settings.clef) || "treble";
             mastery.recordOutcome(clef, chord.key, hit);
+            levelBump(chord.key, hit);
         }
 
         function step(dtSeconds) {
@@ -1030,7 +1057,7 @@ body { display: flex; flex-direction: column; }
                     pushOutcome(false);
                     recordMastery(n, false);
                     emitJudgment({ kind: "expired", chord: n, guess: null });
-                    adjustDifficulty();
+                    maybeAdvance();
                 }
             }
             const FLASH_MS = 200;
@@ -1093,6 +1120,7 @@ body { display: flex; flex-direction: column; }
             engineState.totalJudged = 0;
             engineState.totalHits = 0;
             engineState.window = [];
+            engineState.levelMastery = {};
             engineState.speed = configuredSpeed();
             engineState.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP,
                 (engineState.settings && engineState.settings.startTier) || 1));
@@ -1136,7 +1164,7 @@ body { display: flex; flex-direction: column; }
                 recordMastery(target, false);
                 emitJudgment({ kind: "miss", chord: target, guess: guess });
             }
-            adjustDifficulty();
+            maybeAdvance();
             engineState.staff.render({ notes: engineState.activeNotes });
             emitStats();
         }
@@ -1148,6 +1176,7 @@ body { display: flex; flex-direction: column; }
             if (newSettings.clef && newSettings.clef !== prev.clef) {
                 engineState.activeNotes = [];
                 engineState.lastSpawned = null;
+                engineState.levelMastery = {};
                 if (engineState.staff && typeof engineState.staff.setClef === "function") {
                     engineState.staff.setClef(newSettings.clef);
                 }
@@ -1162,6 +1191,7 @@ body { display: flex; flex-direction: column; }
             if (studyChanged) {
                 engineState.activeNotes = [];
                 engineState.lastSpawned = null;
+                engineState.levelMastery = {};
                 engineState.lastStatsSig = "";
                 engineState.staff.render({ notes: [] });
                 emitStats();
