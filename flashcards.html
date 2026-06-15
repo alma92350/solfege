@@ -599,7 +599,7 @@ body { display: flex; flex-direction: column; }
         const state = {
             svg: null, clef: "treble", width: 0, height: 0,
             staffLineGap: 12, middleY: 0, centerX: 160,
-            staticLayer: null, notesLayer: null,
+            staticLayer: null, notesLayer: null, current: null,
         };
         function el(name, attrs) {
             const node = document.createElementNS(SVG_NS, name);
@@ -702,19 +702,23 @@ body { display: flex; flex-direction: column; }
             state.svg.appendChild(state.notesLayer);
             computeLayout();
             drawStatic();
-            const onResize = () => { computeLayout(); drawStatic(); };
+            // Recompute the staff AND re-render the held note together, so the note
+            // never drifts out of alignment with the lines when the container
+            // resizes (initial layout settle, phase row height changes, etc.).
+            const onResize = () => { computeLayout(); drawStatic(); renderCurrent(); };
             window.addEventListener("resize", onResize);
             if (typeof ResizeObserver !== "undefined") new ResizeObserver(onResize).observe(state.svg);
         }
         function setClef(clef) { state.clef = clef === "bass" ? "bass" : "treble"; drawStatic(); clear(); }
-        function show(element) {
+        function renderCurrent() {
             clearLayer(state.notesLayer);
-            if (!element) return;
-            const g = makeEl(element);
+            if (!state.current) return;
+            const g = makeEl(state.current);
             g.setAttribute("transform", "translate(" + state.centerX + " 0)");
             state.notesLayer.appendChild(g);
         }
-        function clear() { clearLayer(state.notesLayer); }
+        function show(element) { state.current = element || null; renderCurrent(); }
+        function clear() { state.current = null; clearLayer(state.notesLayer); }
         return { init, setClef, show, clear };
     })();
 
