@@ -6,7 +6,7 @@ const path = require("node:path");
 const { generate, ALIAS } = require("../build.js");
 
 const ROOT = path.join(__dirname, "..");
-const APP_PAGES = ["app.html", "chords.html", "song.html", "solfege.html"];
+const APP_PAGES = ["app.html", "chords.html", "song.html", "flashcards.html", "solfege.html"];
 
 function read(name) {
     return fs.readFileSync(path.join(ROOT, name), "utf8");

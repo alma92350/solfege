@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcard Trainer</title>
+    <style>
+:root {
+    --bg: #15181d;
+    --bg-elev: #1e232b;
+    --bg-staff: #f5f1e6;
+    --fg: #e8eaee;
+    --fg-muted: #9aa0a8;
+    --accent: #4ea1ff;
+    --accent-hot: #ffb24e;
+    --good: #5dd29a;
+    --bad: #ff6b6b;
+    --staff-ink: #1a1a1a;
+    --radius: 10px;
+    --pad: 12px;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--fg);
+    font-family: var(--font); overflow: hidden;
+}
+body { display: flex; flex-direction: column; }
+.app-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--pad) calc(var(--pad) * 2);
+    background: var(--bg-elev); border-bottom: 1px solid #2a2f37;
+}
+.app-header h1 { font-size: 1.2rem; margin: 0; letter-spacing: 0.04em; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.app-link {
+    color: var(--accent); text-decoration: none; font-size: 0.95rem;
+    border: 1px solid #3a414c; border-radius: var(--radius); padding: 8px 16px;
+}
+.app-link:hover { background: #2a313b; border-color: var(--accent); }
+.mode-switch { display: inline-flex; background: var(--bg); border: 1px solid #3a414c; border-radius: var(--radius); overflow: hidden; }
+.mode-tab { color: var(--fg-muted); text-decoration: none; font-size: 0.95rem; padding: 8px 16px; transition: background .12s, color .12s; }
+.mode-tab + .mode-tab { border-left: 1px solid #3a414c; }
+.mode-tab:hover { background: #2a313b; color: var(--fg); }
+.mode-tab.is-active { background: var(--accent); color: #06101f; font-weight: 600; }
+.settings-toggle {
+    background: transparent; color: var(--fg); border: 1px solid #3a414c;
+    border-radius: var(--radius); padding: 8px 16px; cursor: pointer; font-size: 0.95rem;
+}
+.settings-toggle:hover { background: #2a313b; }
+.app-main { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: var(--pad); gap: var(--pad); }
+.staff-container {
+    position: relative; flex: 1 1 auto; min-height: 240px;
+    background: var(--bg-staff); border-radius: var(--radius); overflow: hidden;
+    box-shadow: inset 0 0 0 1px #d6d0bf;
+}
+.staff-svg { display: block; width: 100%; height: 100%; }
+
+/* phase banner + progress + entered chips overlay the staff */
+.phase-banner {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    font-size: 0.95rem; font-weight: 600; letter-spacing: 0.03em;
+    color: #5a5340; background: rgba(245,241,230,0.85);
+    padding: 4px 14px; border-radius: 999px; pointer-events: none;
+    border: 1px solid #d6d0bf; white-space: nowrap;
+}
+.phase-banner.result-good { color: #14422c; background: rgba(93,210,154,0.85); border-color: #5dd29a; }
+.phase-banner.result-bad  { color: #4a1414; background: rgba(255,107,107,0.85); border-color: #ff6b6b; }
+.progress-dots {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; pointer-events: none;
+}
+.progress-dots .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #d6cdb4; border: 1px solid #b9b094;
+}
+.progress-dots .dot.active { background: var(--accent); border-color: var(--accent); transform: scale(1.2); }
+.progress-dots .dot.filled { background: #6c6450; border-color: #6c6450; }
+.progress-dots .dot.good { background: var(--good); border-color: var(--good); }
+.progress-dots .dot.bad  { background: var(--bad); border-color: var(--bad); }
+
+.hud {
+    flex: 0 0 auto; display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--pad);
+    background: var(--bg-elev); border-radius: var(--radius); padding: var(--pad);
+}
+.hud-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.hud-label { font-size: 0.72rem; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.hud-value { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg); }
+
+/* entered answers so far */
+.entered {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+    gap: 8px; min-height: 44px; flex-wrap: wrap;
+    background: var(--bg-elev); border-radius: var(--radius); padding: 8px var(--pad);
+}
+.entered .slot {
+    min-width: 54px; text-align: center; padding: 8px 10px; border-radius: 8px;
+    border: 1px dashed #3a414c; color: var(--fg-muted); font-weight: 600;
+    font-size: 1rem; letter-spacing: 0.04em;
+}
+.entered .slot.has { border-style: solid; color: var(--fg); border-color: var(--accent); }
+.entered .slot.good { border-color: var(--good); color: var(--good); }
+.entered .slot.bad  { border-color: var(--bad); color: var(--bad); }
+.entered .slot small { display: block; font-size: 0.62rem; color: var(--fg-muted); font-weight: 500; }
+
+/* answer rows (shared with note + chord input) */
+.answer-row { flex: 0 0 auto; display: grid; gap: var(--pad); }
+.note-row   { grid-template-columns: repeat(7, 1fr); }
+.root-row   { grid-template-columns: repeat(7, 1fr); }
+.quality-row{ grid-template-columns: repeat(4, 1fr); }
+.answer-row[hidden] { display: none; }
+.ans-btn {
+    font-family: var(--font); font-size: clamp(1rem, 2.2vw, 1.4rem); font-weight: 700;
+    letter-spacing: 0.04em; padding: 18px 0;
+    background: var(--bg-elev); color: var(--fg); border: 1px solid #3a414c;
+    border-radius: var(--radius); cursor: pointer;
+    transition: transform 60ms ease, background 120ms ease, border-color 120ms ease;
+    user-select: none;
+}
+.quality-row .ans-btn { background: #1b2027; }
+.ans-btn:hover { background: #2a313b; border-color: var(--accent); }
+.ans-btn:active { transform: translateY(1px); }
+.ans-btn.selected { background: #2a313b; border-color: var(--accent); color: var(--accent); }
+.ans-btn.flash-good { animation: btn-flash-good 260ms ease-out; }
+.ans-btn.flash-bad  { animation: btn-flash-bad  260ms ease-out; }
+.ans-btn:disabled { opacity: 0.4; cursor: default; }
+.ans-btn:disabled:hover { background: var(--bg-elev); border-color: #3a414c; }
+.quality-row .ans-btn:disabled:hover { background: #1b2027; }
+@keyframes btn-flash-good {
+    0%   { background: var(--good); color: #0b1410; border-color: var(--good); transform: scale(1.04); }
+    100% { background: var(--bg-elev); color: var(--fg); border-color: #3a414c; transform: scale(1); }
+}
+@keyframes btn-flash-bad {
+    0%   { background: var(--bad); color: #2a0a0a; border-color: var(--bad); transform: scale(1.02); }
+    100% { background: var(--bg-elev); color: var(--fg); border-color: #3a414c; transform: scale(1); }
+}
+
+.settings-panel {
+    position: fixed; top: 0; right: 0; width: min(360px, 90vw); height: 100vh;
+    background: var(--bg-elev); border-left: 1px solid #2a2f37;
+    padding: calc(var(--pad) * 2); overflow-y: auto; z-index: 10;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.4);
+}
+.settings-panel[hidden] { display: none; }
+.settings-header { display: flex; align-items: center; justify-content: space-between; }
+.settings-close {
+    background: transparent; border: none; color: var(--fg-muted);
+    font-size: 1.6rem; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+.settings-close:hover { color: var(--fg); }
+.settings-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 9; }
+.settings-backdrop[hidden] { display: none; }
+.settings-panel h2 { margin-top: 0; font-size: 1.1rem; letter-spacing: 0.04em; }
+.settings-panel fieldset {
+    border: 1px solid #3a414c; border-radius: var(--radius);
+    margin-bottom: var(--pad); padding: var(--pad);
+}
+.settings-panel fieldset[hidden] { display: none; }
+.settings-panel legend {
+    color: var(--fg-muted); font-size: 0.8rem;
+    text-transform: uppercase; letter-spacing: 0.08em; padding: 0 6px;
+}
+.settings-panel label { display: block; padding: 6px 0; cursor: pointer; }
+.settings-panel .inline-checks label { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; }
+.settings-panel button {
+    background: var(--bg); color: var(--fg); border: 1px solid #3a414c;
+    border-radius: var(--radius); padding: 10px 16px; margin-right: 6px; cursor: pointer;
+}
+.settings-panel button:hover { border-color: var(--accent); }
+.settings-panel input[type="range"] { width: 100%; accent-color: var(--accent); }
+.settings-panel output { display: inline-block; color: var(--accent-hot); font-weight: 600; margin-left: 8px; }
+.study-hint { font-size: 0.82rem; color: var(--fg-muted); margin: 0 0 8px; }
+#btn-reset-highscore { background: #3a1a1a; border-color: #5a2a2a; }
+#btn-reset-highscore:hover { border-color: var(--bad); }
+
+.staff-line { stroke: var(--staff-ink); stroke-width: 1.4; }
+.staff-clef { fill: var(--staff-ink); color: var(--staff-ink); }
+.note-head { fill: var(--staff-ink); }
+.note-stem { stroke: var(--staff-ink); stroke-width: 1.6; }
+.note-accidental { fill: var(--staff-ink); font-family: serif; font-size: 22px; }
+.staff-notes .note { transition: opacity 120ms ease; }
+
+.pause-overlay {
+    position: absolute; inset: 0;
+    background: rgba(20, 24, 30, 0.78); color: var(--fg);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 5;
+    transition: opacity 180ms ease, visibility 180ms ease;
+    backdrop-filter: blur(2px);
+}
+.pause-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.pause-overlay-inner { text-align: center; user-select: none; max-width: 420px; padding: 0 16px; }
+.pause-overlay-icon { font-size: 4rem; line-height: 1; color: var(--accent); margin-bottom: 12px; }
+.pause-overlay-text { font-size: 1.5rem; font-weight: 600; letter-spacing: 0.04em; }
+.pause-overlay-hint { font-size: 0.9rem; color: var(--fg-muted); margin-top: 8px; }
+
+@media (max-width: 720px) {
+    .hud { grid-template-columns: repeat(3, 1fr); }
+    .ans-btn { padding: 14px 0; }
+}
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Flashcard Trainer</h1>
+        <div class="header-actions">
+            <nav class="mode-switch" aria-label="Trainer mode">
+                <a class="mode-tab" href="app.html">Notes</a>
+                <a class="mode-tab" href="chords.html">Chords</a>
+                <a class="mode-tab" href="song.html">Songs</a>
+                <a class="mode-tab is-active" href="flashcards.html" aria-current="page">Flashcards</a>
+            </nav>
+            <a class="app-link" href="index.html">Home</a>
+            <button id="settings-toggle" class="settings-toggle" aria-label="Toggle settings" aria-controls="settings-panel" aria-expanded="false">Settings</button>
+        </div>
+    </header>
+
+    <main class="app-main">
+        <section id="staff-container" class="staff-container" aria-label="Flashcard staff">
+            <svg id="staff-svg" class="staff-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"></svg>
+            <div id="phase-banner" class="phase-banner" aria-live="polite">Watch the sequence</div>
+            <div id="progress-dots" class="progress-dots" aria-hidden="true"></div>
+            <div id="pause-overlay" class="pause-overlay" role="button" tabindex="0" aria-label="Paused — click to start" aria-hidden="true">
+                <div class="pause-overlay-inner">
+                    <div class="pause-overlay-icon">&#9654;</div>
+                    <div class="pause-overlay-text">Click to Start</div>
+                    <div class="pause-overlay-hint">Watch the flashed sequence, then play it back from memory. (Space toggles pause.)</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="hud" class="hud" aria-label="Game status">
+            <div class="hud-cell"><span class="hud-label">Score</span><span id="hud-score" class="hud-value">0</span></div>
+            <div class="hud-cell"><span class="hud-label">Streak</span><span id="hud-streak" class="hud-value">0</span></div>
+            <div class="hud-cell"><span class="hud-label">Accuracy</span><span id="hud-accuracy" class="hud-value">--%</span></div>
+            <div class="hud-cell"><span class="hud-label">Length</span><span id="hud-length" class="hud-value">3</span></div>
+            <div class="hud-cell"><span class="hud-label">Flash</span><span id="hud-flash" class="hud-value">--</span></div>
+            <div class="hud-cell"><span class="hud-label">Best</span><span id="hud-highscore" class="hud-value">0</span></div>
+        </section>
+
+        <section id="entered" class="entered" aria-label="Your answer so far"></section>
+
+        <section id="note-answer" class="answer-row note-row" aria-label="Note answer buttons">
+            <button class="ans-btn" data-solfege="DO">DO</button>
+            <button class="ans-btn" data-solfege="RE">RE</button>
+            <button class="ans-btn" data-solfege="MI">MI</button>
+            <button class="ans-btn" data-solfege="FA">FA</button>
+            <button class="ans-btn" data-solfege="SOL">SOL</button>
+            <button class="ans-btn" data-solfege="LA">LA</button>
+            <button class="ans-btn" data-solfege="SI">SI</button>
+        </section>
+
+        <section id="root-answer" class="answer-row root-row" aria-label="Chord root" hidden>
+            <button class="ans-btn" data-root="DO">DO</button>
+            <button class="ans-btn" data-root="RE">RE</button>
+            <button class="ans-btn" data-root="MI">MI</button>
+            <button class="ans-btn" data-root="FA">FA</button>
+            <button class="ans-btn" data-root="SOL">SOL</button>
+            <button class="ans-btn" data-root="LA">LA</button>
+            <button class="ans-btn" data-root="SI">SI</button>
+        </section>
+        <section id="quality-answer" class="answer-row quality-row" aria-label="Chord quality" hidden>
+            <button class="ans-btn" data-quality="maj">Major</button>
+            <button class="ans-btn" data-quality="min">Minor</button>
+            <button class="ans-btn" data-quality="dim">Dim</button>
+            <button class="ans-btn" data-quality="aug">Aug</button>
+        </section>
+    </main>
+
+    <div id="settings-backdrop" class="settings-backdrop" hidden></div>
+    <aside id="settings-panel" class="settings-panel" hidden>
+        <div class="settings-header">
+            <h2>Settings</h2>
+            <button id="settings-close" class="settings-close" type="button" aria-label="Close settings">&times;</button>
+        </div>
+        <fieldset>
+            <legend>Flashcard Type</legend>
+            <label><input type="radio" name="element" value="notes" checked> Notes</label>
+            <label><input type="radio" name="element" value="chords"> Chords</label>
+        </fieldset>
+        <fieldset>
+            <legend>Notes per card</legend>
+            <label><input type="range" id="length" min="1" max="5" value="3" step="1"></label>
+            <output id="length-output">3</output>
+        </fieldset>
+        <fieldset>
+            <legend>Clef</legend>
+            <label><input type="radio" name="clef" value="treble" checked> Clef de Sol (Treble)</label>
+            <label><input type="radio" name="clef" value="bass"> Clef de Fa (Bass)</label>
+        </fieldset>
+        <fieldset id="note-study">
+            <legend>Note Study Set</legend>
+            <p class="study-hint">Which notes can appear. Under-practised ones show up more often.</p>
+            <div class="inline-checks">
+                <label><input type="checkbox" data-note="DO" checked> DO</label>
+                <label><input type="checkbox" data-note="RE" checked> RE</label>
+                <label><input type="checkbox" data-note="MI" checked> MI</label>
+                <label><input type="checkbox" data-note="FA" checked> FA</label>
+                <label><input type="checkbox" data-note="SOL" checked> SOL</label>
+                <label><input type="checkbox" data-note="LA" checked> LA</label>
+                <label><input type="checkbox" data-note="SI" checked> SI</label>
+            </div>
+        </fieldset>
+        <fieldset id="chord-study" hidden>
+            <legend>Chord Study Set</legend>
+            <p class="study-hint">Qualities and voicings to draw from.</p>
+            <div class="inline-checks">
+                <label><input type="checkbox" data-quality="maj" checked> Major</label>
+                <label><input type="checkbox" data-quality="min" checked> Minor</label>
+                <label><input type="checkbox" data-quality="dim" checked> Dim</label>
+                <label><input type="checkbox" data-quality="aug"> Aug</label>
+            </div>
+            <div class="inline-checks" style="margin-top:6px;">
+                <label><input type="checkbox" data-inversion="0" checked> Root</label>
+                <label><input type="checkbox" data-inversion="1"> 1st inv</label>
+                <label><input type="checkbox" data-inversion="2"> 2nd inv</label>
+            </div>
+        </fieldset>
+        <fieldset>
+            <legend>Starting Level</legend>
+            <label><input type="range" id="start-tier" min="1" max="4" value="1" step="1"></label>
+            <output id="start-tier-output">1</output>
+        </fieldset>
+        <fieldset>
+            <legend>Game</legend>
+            <button id="btn-start" type="button">Start</button>
+            <button id="btn-pause" type="button">Pause</button>
+            <button id="btn-reset" type="button">Reset</button>
+        </fieldset>
+        <fieldset>
+            <legend>High Score</legend>
+            <button id="btn-reset-highscore" type="button">Reset High Score</button>
+        </fieldset>
+        <fieldset>
+            <legend>Training</legend>
+            <button id="btn-reset-mastery" type="button">Reset Training Memory</button>
+        </fieldset>
+    </aside>
+
+    <script src="shared/music.js"></script>
+    <script>
+/*
+ * Flashcard Trainer — memorize a short sequence of notes or chords.
+ *
+ * The app flashes a sequence (1-5 elements) one at a time, then hides it and
+ * asks the player to reproduce it from memory. Element variety is driven by the
+ * same mastery-weighted selection as the other trainers, and the flash speed
+ * accelerates with the same mastery-gated ladder: new material is introduced
+ * first; only once the whole scope is mastered does the flashing get faster.
+ *
+ * Pure pitch/theory helpers live in shared/music.js (single source of truth).
+ */
+(function () {
+    "use strict";
+    const music = (typeof window !== "undefined" && window.Solfege && window.Solfege.music) || null;
+    if (!music) throw new Error("shared/music.js must load before this script");
+
+    const SOLFEGE_ORDER = music.SOLFEGE_ORDER;
+    const QUALITY_LABEL = { maj: "", min: "m", dim: "°", aug: "+" };
+
+    // ========================================================================
+    // settings module
+    // ========================================================================
+    const settings = (function () {
+        const KEY = "flash.settings.v1";
+        const DEFAULTS = Object.freeze({
+            element: "notes", length: 3, clef: "treble", startTier: 1,
+            noteNames: SOLFEGE_ORDER.slice(),
+            chordQualities: ["maj", "min", "dim"], chordInversions: [0],
+        });
+        let current = null;
+        function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+        function sanitize(raw) {
+            const out = clone(DEFAULTS);
+            if (raw && typeof raw === "object") {
+                if (raw.element === "notes" || raw.element === "chords") out.element = raw.element;
+                const len = parseInt(raw.length, 10);
+                if (Number.isFinite(len)) out.length = Math.min(5, Math.max(1, len));
+                if (raw.clef === "treble" || raw.clef === "bass") out.clef = raw.clef;
+                const t = parseInt(raw.startTier, 10);
+                if (Number.isFinite(t)) out.startTier = Math.min(4, Math.max(1, t));
+                if (Array.isArray(raw.noteNames)) {
+                    const f = raw.noteNames.filter(n => SOLFEGE_ORDER.indexOf(n) !== -1);
+                    if (f.length) out.noteNames = f;
+                }
+                if (Array.isArray(raw.chordQualities)) {
+                    const f = raw.chordQualities.filter(q => ["maj", "min", "dim", "aug"].indexOf(q) !== -1);
+                    if (f.length) out.chordQualities = f;
+                }
+                if (Array.isArray(raw.chordInversions)) {
+                    const f = raw.chordInversions.map(n => parseInt(n, 10)).filter(n => n >= 0 && n <= 2);
+                    if (f.length) out.chordInversions = f;
+                }
+            }
+            return out;
+        }
+        function load() {
+            if (current) return clone(current);
+            let raw = null;
+            try { const s = localStorage.getItem(KEY); if (s) raw = JSON.parse(s); } catch (_) { raw = null; }
+            current = sanitize(raw);
+            return clone(current);
+        }
+        function get() { return current ? clone(current) : load(); }
+        function update(patch) {
+            if (!current) load();
+            current = sanitize(Object.assign({}, current, patch || {}));
+            try { localStorage.setItem(KEY, JSON.stringify(current)); } catch (_) {}
+            return clone(current);
+        }
+        return { load, get, update };
+    })();
+
+    // ========================================================================
+    // elements module (note + chord generation, mastery-weighted selection)
+    // ========================================================================
+    const elements = (function () {
+        // ---- chords (diatonic C-major triads, mirrors the Chord trainer) ----
+        const INTERVALS = { maj: [0, 4, 7], min: [0, 3, 7], dim: [0, 3, 6], aug: [0, 4, 8] };
+        const SCALE = [
+            { pc: 0, q: "maj" }, { pc: 2, q: "min" }, { pc: 4, q: "min" }, { pc: 5, q: "maj" },
+            { pc: 7, q: "maj" }, { pc: 9, q: "min" }, { pc: 11, q: "dim" },
+        ];
+        const QUALITY_BY_PC = {};
+        SCALE.forEach(d => { QUALITY_BY_PC[d.pc] = d.q; });
+        const AUG_ROOT_PCS = new Set([0, 5, 7]);
+
+        function tierWindow(tier) { return tier <= 1 ? 6 : tier === 2 ? 9 : tier === 3 ? 11 : 12; }
+
+        function buildChord(rootMidi, quality, inversion, clef) {
+            const ivs = INTERVALS[quality] || INTERVALS.maj;
+            let midis;
+            if (inversion === 1) midis = [rootMidi + ivs[1], rootMidi + ivs[2], rootMidi + 12 + ivs[0]];
+            else if (inversion === 2) midis = [rootMidi + ivs[2], rootMidi + 12 + ivs[0], rootMidi + 12 + ivs[1]];
+            else midis = [rootMidi + ivs[0], rootMidi + ivs[1], rootMidi + ivs[2]];
+            midis.sort((a, b) => a - b);
+            const root = music.midiToSolfege(rootMidi);
+            return {
+                kind: "chord", root: root, quality: quality, inversion: inversion,
+                notes: midis,
+                steps: midis.map(m => music.midiToStaffStep(m, clef)),
+                accidentals: midis.map(m => music.midiToAccidental(m)),
+                key: root + ":" + quality + ":" + inversion,
+                answer: { type: "chord", root: root, quality: quality },
+            };
+        }
+        function rootSupports(pc, quality) {
+            if (QUALITY_BY_PC[pc] === quality) return true;
+            if (quality === "aug" && AUG_ROOT_PCS.has(pc)) return true;
+            return false;
+        }
+        function chordCandidates(tier, clef, s) {
+            const win = tierWindow(tier);
+            const loRoot = clef === "bass" ? 33 : 50;
+            const hiRoot = clef === "bass" ? 67 : 84;
+            const quals = (s.chordQualities && s.chordQualities.length) ? s.chordQualities : ["maj", "min", "dim"];
+            const invs = (s.chordInversions && s.chordInversions.length) ? s.chordInversions : [0];
+            const out = [];
+            for (let r = loRoot; r <= hiRoot; r++) {
+                const pc = ((r % 12) + 12) % 12;
+                if (!QUALITY_BY_PC.hasOwnProperty(pc)) continue;
+                for (let qi = 0; qi < quals.length; qi++) {
+                    if (!rootSupports(pc, quals[qi])) continue;
+                    for (let ii = 0; ii < invs.length; ii++) {
+                        const c = buildChord(r, quals[qi], invs[ii], clef);
+                        if (c.steps.every(st => Math.abs(st) <= win)) out.push(c);
+                    }
+                }
+            }
+            return out;
+        }
+
+        // ---- notes (diatonic C-major within a vertical window) ----
+        function noteWindow(tier) { return tier <= 1 ? 5 : tier === 2 ? 7 : tier === 3 ? 9 : 11; }
+        function buildNote(midi, clef) {
+            const step = music.midiToStaffStep(midi, clef);
+            const sol = music.midiToSolfege(midi);
+            return {
+                kind: "note", solfege: sol, notes: [midi],
+                steps: [step], accidentals: [music.midiToAccidental(midi)],
+                key: "note:" + step, answer: { type: "note", solfege: sol },
+            };
+        }
+        function noteCandidates(tier, clef, s) {
+            const win = noteWindow(tier);
+            const lo = clef === "bass" ? 40 : 57;
+            const hi = clef === "bass" ? 64 : 81;
+            const names = (s.noteNames && s.noteNames.length) ? s.noteNames : SOLFEGE_ORDER;
+            const out = [];
+            for (let m = lo; m <= hi; m++) {
+                if (!music.isInCMajor(m)) continue;
+                if (names.indexOf(music.midiToSolfege(m)) === -1) continue;
+                if (Math.abs(music.midiToStaffStep(m, clef)) > win) continue;
+                out.push(buildNote(m, clef));
+            }
+            return out;
+        }
+
+        function candidates(s, tier) {
+            const t = Math.max(1, Math.floor(tier || 1));
+            const list = s.element === "chords"
+                ? chordCandidates(t, s.clef, s)
+                : noteCandidates(t, s.clef, s);
+            if (list.length) return list;
+            // Fallback so the game never stalls on an empty study set.
+            return s.element === "chords"
+                ? chordCandidates(t, s.clef, { chordQualities: ["maj", "min", "dim"], chordInversions: [0] })
+                : noteCandidates(t, s.clef, { noteNames: SOLFEGE_ORDER });
+        }
+
+        // Distinct learnable keys for the current scope (drives the mastery gate).
+        function scopeKeys(s, tier) {
+            const seen = {}, out = [];
+            candidates(s, tier).forEach(c => { if (!seen[c.key]) { seen[c.key] = true; out.push(c.key); } });
+            return out;
+        }
+
+        // Weighted pick (low mastery -> higher weight), avoiding an immediate repeat.
+        function pick(s, tier, weightFn, avoidKey) {
+            let pool = candidates(s, tier);
+            if (avoidKey != null) {
+                const f = pool.filter(c => c.key !== avoidKey);
+                if (f.length) pool = f;
+            }
+            if (weightFn) {
+                const w = pool.map(c => { const v = weightFn(c.key); return v > 0 ? v : 0.0001; });
+                let total = 0; for (let i = 0; i < w.length; i++) total += w[i];
+                let r = Math.random() * total, choice = pool[pool.length - 1];
+                for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) { choice = pool[i]; break; } }
+                return choice;
+            }
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+
+        // Build a whole card: `length` elements, mastery-weighted, avoiding
+        // back-to-back duplicates for variety.
+        function buildCard(s, tier, weightFn) {
+            const n = Math.min(5, Math.max(1, s.length || 1));
+            const card = [];
+            let prevKey = null;
+            for (let i = 0; i < n; i++) {
+                const e = pick(s, tier, weightFn, prevKey);
+                card.push(e);
+                prevKey = e.key;
+            }
+            return card;
+        }
+
+        return { candidates, scopeKeys, buildCard, QUALITY_LABEL };
+    })();
+
+    // ========================================================================
+    // mastery module (per-element training score + selection weight)
+    // ========================================================================
+    const mastery = (function () {
+        const KEY = "flash.mastery.v1";
+        const ALPHA = 0.25;
+        const EPS = 0.15;
+        let data = null;
+        function fresh() { return { treble: {}, bass: {} }; }
+        function load() {
+            if (data) return;
+            let raw = null;
+            try { const s = localStorage.getItem(KEY); if (s) raw = JSON.parse(s); } catch (_) { raw = null; }
+            data = fresh();
+            if (raw && typeof raw === "object") {
+                ["treble", "bass"].forEach(c => {
+                    if (raw[c] && typeof raw[c] === "object") data[c] = raw[c];
+                });
+            }
+        }
+        function save() { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (_) {} }
+        function forClef(clef) { if (!data) load(); return data[clef === "bass" ? "bass" : "treble"]; }
+        function valOf(d, key) { const v = d[key]; return typeof v === "number" ? v : 0; }
+        function weightFor(clef, key) { return (1 - valOf(forClef(clef), key)) + EPS; }
+        function recordOutcome(clef, key, hit) {
+            const d = forClef(clef);
+            const cur = valOf(d, key);
+            d[key] = hit ? cur + ALPHA * (1 - cur) : cur * (1 - ALPHA);
+            save();
+        }
+        function averageOver(clef, keys) {
+            if (!keys || !keys.length) return 0;
+            const d = forClef(clef);
+            let s = 0; for (let i = 0; i < keys.length; i++) s += valOf(d, keys[i]);
+            return s / keys.length;
+        }
+        function reset() { data = fresh(); save(); }
+        return { load, weightFor, recordOutcome, averageOver, reset };
+    })();
+
+    // ========================================================================
+    // staff module (renders one centered note/chord at a time)
+    // ========================================================================
+    const staff = (function () {
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        const state = {
+            svg: null, clef: "treble", width: 0, height: 0,
+            staffLineGap: 12, middleY: 0, centerX: 160,
+            staticLayer: null, notesLayer: null,
+        };
+        function el(name, attrs) {
+            const node = document.createElementNS(SVG_NS, name);
+            if (attrs) for (const k in attrs) node.setAttribute(k, String(attrs[k]));
+            return node;
+        }
+        function yForStep(step) { return state.middleY - step * (state.staffLineGap / 2); }
+        function computeLayout() {
+            const rect = state.svg.getBoundingClientRect();
+            const w = Math.max(1, Math.floor(rect.width));
+            const h = Math.max(1, Math.floor(rect.height));
+            state.width = w; state.height = h;
+            state.svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+            state.staffLineGap = Math.min(16, Math.max(10, Math.round(h * 0.06)));
+            state.middleY = Math.round(h / 2);
+            state.centerX = Math.max(150, Math.round(w * 0.52));
+        }
+        function clearLayer(layer) { while (layer.firstChild) layer.removeChild(layer.firstChild); }
+
+        const TREBLE_PATH =
+            "M 5 -45 C -8 -30 -8 -10 6 -2 C 22 8 26 30 14 42 C 6 50 -6 48 -10 38 " +
+            "C -13 30 -7 22 2 22 C 12 22 18 30 16 40 C 14 48 8 52 0 52 " +
+            "M 6 -2 C -10 8 -10 30 6 38 M 6 -45 L 6 55 M 6 55 C 6 60 2 62 -1 60";
+        const BASS_PATH = "M -8 -10 C 0 -16 14 -14 18 -4 C 22 6 18 18 8 22 C 0 25 -6 22 -10 16";
+
+        function makeClef(clef) {
+            const g = el("g", { class: "staff-clef" });
+            if (clef === "treble") {
+                const cy = yForStep(-2), scale = (state.staffLineGap * 4) / 80, cx = 28;
+                g.appendChild(el("path", {
+                    d: TREBLE_PATH, transform: "translate(" + cx + " " + cy + ") scale(" + scale + ")",
+                    fill: "currentColor", stroke: "currentColor", "stroke-width": 2.2,
+                    "stroke-linecap": "round", "stroke-linejoin": "round", "fill-opacity": 0.0,
+                }));
+            } else {
+                const cy = yForStep(2), scale = (state.staffLineGap * 2.2) / 30, cx = 22;
+                g.appendChild(el("path", {
+                    d: BASS_PATH, transform: "translate(" + cx + " " + cy + ") scale(" + scale + ")",
+                    fill: "currentColor", stroke: "currentColor", "stroke-width": 3,
+                    "stroke-linecap": "round", "stroke-linejoin": "round", "fill-opacity": 0.0,
+                }));
+                const dotR = Math.max(1.6, state.staffLineGap * 0.18), dotX = cx + scale * 26;
+                g.appendChild(el("circle", { cx: dotX, cy: cy - state.staffLineGap / 2, r: dotR, fill: "currentColor" }));
+                g.appendChild(el("circle", { cx: dotX, cy: cy + state.staffLineGap / 2, r: dotR, fill: "currentColor" }));
+            }
+            return g;
+        }
+        function drawStatic() {
+            clearLayer(state.staticLayer);
+            for (let step = -4; step <= 4; step += 2) {
+                const y = yForStep(step);
+                state.staticLayer.appendChild(el("line", { class: "staff-line", x1: 8, x2: state.width - 4, y1: y, y2: y }));
+            }
+            state.staticLayer.appendChild(makeClef(state.clef));
+        }
+        function makeEl(element) {
+            const g = el("g", { class: "note" });
+            const steps = element.steps;
+            const minStep = Math.min.apply(null, steps), maxStep = Math.max.apply(null, steps);
+            const rx = state.staffLineGap * 0.66, ry = state.staffLineGap * 0.5, headW = state.staffLineGap * 1.1;
+            function ledgers(stepVal) {
+                if (Math.abs(stepVal) <= 4) return;
+                const sign = stepVal > 0 ? 1 : -1;
+                for (let s = 6; s <= Math.abs(stepVal); s += 2) {
+                    const ly = yForStep(sign * s);
+                    g.appendChild(el("line", { class: "staff-line", x1: -headW / 1.4, x2: headW / 1.4, y1: ly, y2: ly }));
+                }
+            }
+            ledgers(minStep); ledgers(maxStep);
+            const midStep = steps[Math.floor(steps.length / 2)], stemUp = midStep <= 0;
+            const sx = stemUp ? rx * 0.95 : -rx * 0.95;
+            const yLow = yForStep(minStep), yHigh = yForStep(maxStep), stemLen = state.staffLineGap * 3.2;
+            if (stemUp) g.appendChild(el("line", { class: "note-stem", x1: sx, y1: yLow, x2: sx, y2: yHigh - stemLen }));
+            else g.appendChild(el("line", { class: "note-stem", x1: sx, y1: yHigh, x2: sx, y2: yLow + stemLen }));
+            for (let i = 0; i < steps.length; i++) {
+                const noteY = yForStep(steps[i]);
+                g.appendChild(el("ellipse", {
+                    class: "note-head", cx: 0, cy: noteY, rx: rx, ry: ry,
+                    transform: "rotate(-20 0 " + noteY + ")",
+                }));
+                const acc = element.accidentals[i];
+                if (acc === "#" || acc === "b") {
+                    const t = el("text", {
+                        class: "note-accidental", x: -rx - state.staffLineGap * 0.55,
+                        y: noteY + state.staffLineGap * 0.32, "text-anchor": "middle",
+                    });
+                    t.textContent = acc === "#" ? "♯" : "♭";
+                    g.appendChild(t);
+                }
+            }
+            return g;
+        }
+        function init(opts) {
+            state.svg = opts.svg;
+            state.clef = opts.clef || "treble";
+            clearLayer(state.svg);
+            state.staticLayer = el("g", { class: "staff-static" });
+            state.notesLayer = el("g", { class: "staff-notes" });
+            state.svg.appendChild(state.staticLayer);
+            state.svg.appendChild(state.notesLayer);
+            computeLayout();
+            drawStatic();
+            const onResize = () => { computeLayout(); drawStatic(); };
+            window.addEventListener("resize", onResize);
+            if (typeof ResizeObserver !== "undefined") new ResizeObserver(onResize).observe(state.svg);
+        }
+        function setClef(clef) { state.clef = clef === "bass" ? "bass" : "treble"; drawStatic(); clear(); }
+        function show(element) {
+            clearLayer(state.notesLayer);
+            if (!element) return;
+            const g = makeEl(element);
+            g.setAttribute("transform", "translate(" + state.centerX + " 0)");
+            state.notesLayer.appendChild(g);
+        }
+        function clear() { clearLayer(state.notesLayer); }
+        return { init, setClef, show, clear };
+    })();
+
+    // ========================================================================
+    // engine module (flashcard sequencer + mastery-gated flash speed)
+    // ========================================================================
+    const engine = (function () {
+        const FLASH_START = 850;   // ms each element is shown, at the slowest level
+        const FLASH_MIN = 260;     // fastest the flashing can get
+        const FLASH_STEP = 0.85;   // multiply flash time per speed milestone
+        const GAP_MS = 200;        // blank gap between flashed elements
+        const REVEAL_MS = 1600;    // how long the result is shown before the next card
+        const LEVEL_ALPHA = 0.25;
+        const LEVEL_MASTERED = 0.85;
+        const TIER_FLOOR = 1, TIER_CAP = 4;
+        const WINDOW_SIZE = 20;
+        const HIGH_SCORE_KEY = "flash.highScore";
+
+        const st = {
+            settings: null, running: false, rafId: 0, lastMs: 0,
+            phase: "idle", card: [], showIdx: 0, showOn: false, phaseMs: 0,
+            entered: [], lastResult: null,
+            tier: 1, flashMs: FLASH_START, levelMastery: {},
+            score: 0, streak: 0, totalCards: 0, window: [], highScore: 0,
+            statsListener: null, viewListener: null, lastStatsSig: "",
+        };
+
+        function clefOf() { return (st.settings && st.settings.clef) || "treble"; }
+        function rollingAccuracy() {
+            if (!st.window.length) return 1.0;
+            let s = 0; for (let i = 0; i < st.window.length; i++) s += st.window[i];
+            return s / st.window.length;
+        }
+        function pushOutcome(hit) { st.window.push(hit ? 1 : 0); if (st.window.length > WINDOW_SIZE) st.window.shift(); }
+        function loadHigh() { try { const v = parseInt(localStorage.getItem(HIGH_SCORE_KEY), 10); return Number.isFinite(v) && v >= 0 ? v : 0; } catch (_) { return 0; } }
+        function saveHigh(v) { try { localStorage.setItem(HIGH_SCORE_KEY, String(v)); } catch (_) {} }
+
+        function emitStats() {
+            if (!st.statsListener) return;
+            const stats = getStats();
+            const sig = [stats.score, stats.streak, stats.cards, stats.accuracy.toFixed(3), stats.length,
+                Math.round(stats.flashMs), stats.tier, stats.highScore].join("|");
+            if (sig === st.lastStatsSig) return;
+            st.lastStatsSig = sig;
+            st.statsListener(stats);
+        }
+        function emitView(kind) {
+            if (!st.viewListener) return;
+            st.viewListener({
+                kind: kind, phase: st.phase, length: st.card.length,
+                showIdx: st.showIdx, entered: st.entered.slice(),
+                card: st.card, result: st.lastResult,
+            });
+        }
+
+        // ---- mastery-gated progression (applied to flash speed) ----
+        function scopeKeys() { return elements.scopeKeys(st.settings, st.tier); }
+        function levelBump(key, hit) {
+            const c = st.levelMastery[key] || 0;
+            st.levelMastery[key] = hit ? c + LEVEL_ALPHA * (1 - c) : c * (1 - LEVEL_ALPHA);
+        }
+        function levelAllMastered() {
+            const keys = scopeKeys();
+            if (!keys.length) return false;
+            for (let i = 0; i < keys.length; i++) if ((st.levelMastery[keys[i]] || 0) < LEVEL_MASTERED) return false;
+            return true;
+        }
+        // Learn every element first (introduce new material via the level), then
+        // make the flashing faster — re-proving mastery after each step.
+        function maybeAdvance() {
+            if (!levelAllMastered()) return;
+            if (st.tier < TIER_CAP) st.tier += 1;                                    // introduce new elements
+            else st.flashMs = Math.max(FLASH_MIN, st.flashMs * FLASH_STEP);          // then flash faster
+            st.levelMastery = {};
+            st.window = [];
+        }
+
+        function weightFn(key) { return mastery.weightFor(clefOf(), key); }
+
+        function startCard() {
+            st.card = elements.buildCard(st.settings, st.tier, weightFn);
+            st.entered = [];
+            st.lastResult = null;
+            st.phase = "show";
+            st.showIdx = 0;
+            st.showOn = true;
+            st.phaseMs = 0;
+            staff.show(st.card[0]);
+            emitView("show");
+            emitStats();
+        }
+
+        function beginRecall() {
+            st.phase = "recall";
+            staff.clear();
+            emitView("recall");
+        }
+
+        function judgeCard() {
+            const allCorrect = st.entered.length === st.card.length && st.entered.every(e => e.correct);
+            st.totalCards += 1;
+            if (allCorrect) {
+                st.streak += 1;
+                const mult = Math.min(5, 1 + Math.floor(st.streak / 5));
+                st.score += 10 * st.card.length * mult;
+                if (st.score > st.highScore) { st.highScore = st.score; saveHigh(st.highScore); }
+                pushOutcome(true);
+            } else {
+                st.streak = 0;
+                pushOutcome(false);
+            }
+            st.lastResult = { allCorrect: allCorrect };
+            maybeAdvance();
+            st.phase = "reveal";
+            st.phaseMs = 0;
+            staff.clear();
+            emitView("reveal");
+            emitStats();
+        }
+
+        // Player submits one element during recall.
+        function inputElement(answer) {
+            if (st.phase !== "recall") return;
+            const idx = st.entered.length;
+            if (idx >= st.card.length) return;
+            const expected = st.card[idx];
+            const correct = answersMatch(answer, expected.answer);
+            mastery.recordOutcome(clefOf(), expected.key, correct);
+            levelBump(expected.key, correct);
+            st.entered.push({ answer: answer, correct: correct, expected: expected.answer });
+            emitView("entry");
+            if (st.entered.length >= st.card.length) judgeCard();
+        }
+
+        function answersMatch(a, b) {
+            if (!a || !b || a.type !== b.type) return false;
+            if (a.type === "note") return a.solfege === b.solfege;
+            return a.root === b.root && a.quality === b.quality;
+        }
+
+        function step(dtMs) {
+            if (st.phase === "show") {
+                st.phaseMs += dtMs;
+                if (st.showOn && st.phaseMs >= st.flashMs) {
+                    st.showOn = false; st.phaseMs = 0; staff.clear(); emitView("gap");
+                } else if (!st.showOn && st.phaseMs >= GAP_MS) {
+                    st.showIdx += 1; st.phaseMs = 0;
+                    if (st.showIdx >= st.card.length) { beginRecall(); }
+                    else { st.showOn = true; staff.show(st.card[st.showIdx]); emitView("show"); }
+                }
+            } else if (st.phase === "reveal") {
+                st.phaseMs += dtMs;
+                if (st.phaseMs >= REVEAL_MS) startCard();
+            }
+        }
+
+        function loop(nowMs) {
+            if (!st.running) return;
+            const dt = Math.min(80, nowMs - st.lastMs);
+            st.lastMs = nowMs;
+            step(dt);
+            st.rafId = requestAnimationFrame(loop);
+        }
+
+        function init(opts) {
+            st.settings = opts.settings;
+            st.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP, st.settings.startTier || 1));
+            st.flashMs = FLASH_START;
+            mastery.load();
+            st.highScore = loadHigh();
+            emitStats();
+            emitView("idle");
+        }
+        function start() {
+            if (st.running) return;
+            st.running = true;
+            st.lastMs = performance.now();
+            if (st.phase === "idle" || !st.card.length) startCard();
+            st.rafId = requestAnimationFrame(loop);
+        }
+        function pause() {
+            if (!st.running) return;
+            st.running = false;
+            if (st.rafId) cancelAnimationFrame(st.rafId);
+            st.rafId = 0;
+        }
+        function reset() {
+            st.phase = "idle"; st.card = []; st.entered = []; st.lastResult = null;
+            st.showIdx = 0; st.showOn = false; st.phaseMs = 0;
+            st.score = 0; st.streak = 0; st.totalCards = 0; st.window = [];
+            st.levelMastery = {};
+            st.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP, (st.settings && st.settings.startTier) || 1));
+            st.flashMs = FLASH_START;
+            st.lastStatsSig = "";
+            staff.clear();
+            emitStats();
+            // If we were mid-game, immediately deal a fresh card; otherwise wait
+            // on the idle/start overlay.
+            if (st.running) startCard();
+            else { st.phase = "idle"; emitView("idle"); }
+        }
+        function applySettings(ns) {
+            const prev = st.settings || {};
+            st.settings = ns;
+            const scopeChanged = ns.element !== prev.element || ns.clef !== prev.clef ||
+                ns.length !== prev.length ||
+                JSON.stringify(ns.noteNames) !== JSON.stringify(prev.noteNames) ||
+                JSON.stringify(ns.chordQualities) !== JSON.stringify(prev.chordQualities) ||
+                JSON.stringify(ns.chordInversions) !== JSON.stringify(prev.chordInversions);
+            if (ns.clef !== prev.clef) staff.setClef(ns.clef);
+            if (scopeChanged) { st.levelMastery = {}; st.lastStatsSig = ""; }
+        }
+        function getStats() {
+            return {
+                score: st.score, streak: st.streak, accuracy: rollingAccuracy(),
+                cards: st.totalCards,
+                length: st.settings ? st.settings.length : 0,
+                flashMs: st.flashMs, tier: st.tier, highScore: st.highScore,
+                expertise: mastery.averageOver(clefOf(), scopeKeys()),
+            };
+        }
+        function resetHighScore() { st.highScore = 0; try { localStorage.removeItem(HIGH_SCORE_KEY); } catch (_) {} st.lastStatsSig = ""; emitStats(); }
+        function isRunning() { return st.running; }
+        function onStats(fn) { st.statsListener = typeof fn === "function" ? fn : null; }
+        function onView(fn) { st.viewListener = typeof fn === "function" ? fn : null; }
+        return { init, start, pause, reset, applySettings, inputElement, getStats,
+                 resetHighScore, isRunning, onStats, onView };
+    })();
+
+    // ========================================================================
+    // ui module
+    // ========================================================================
+    const ui = (function () {
+        const NOTE_KEYS = { "1": "DO", "2": "RE", "3": "MI", "4": "FA", "5": "SOL", "6": "LA", "7": "SI" };
+        const uiState = { overlay: null, running: false, selectedRoot: null, selectedQuality: null, lastStats: {} };
+        function $(s) { return document.querySelector(s); }
+        function on(e, ev, fn) { if (e) e.addEventListener(ev, fn); }
+
+        function answerLabel(ans) {
+            if (!ans) return "";
+            if (ans.type === "note") return ans.solfege;
+            return ans.root + (QUALITY_LABEL[ans.quality] || "");
+        }
+        function elementLabel(element) { return answerLabel(element.answer); }
+
+        function setMode(element) {
+            const isChords = element === "chords";
+            $("#note-answer").hidden = isChords;
+            $("#root-answer").hidden = !isChords;
+            $("#quality-answer").hidden = !isChords;
+            $("#note-study").hidden = isChords;
+            $("#chord-study").hidden = !isChords;
+        }
+
+        function flash(btn, kind) {
+            if (!btn) return;
+            const cls = kind === "good" ? "flash-good" : "flash-bad";
+            btn.classList.remove("flash-good", "flash-bad");
+            void btn.offsetWidth;
+            btn.classList.add(cls);
+            setTimeout(() => btn.classList.remove(cls), 280);
+        }
+
+        function clearChordSelection() {
+            uiState.selectedRoot = null; uiState.selectedQuality = null;
+            document.querySelectorAll("#root-answer .ans-btn, #quality-answer .ans-btn")
+                .forEach(b => b.classList.remove("selected"));
+        }
+
+        function answerEnabled(enabled) {
+            document.querySelectorAll(".answer-row .ans-btn").forEach(b => { b.disabled = !enabled; });
+        }
+
+        function submitNote(solfege, btn) {
+            if (!solfege) return;
+            const before = engineEnteredCount();
+            engine.inputElement({ type: "note", solfege: solfege });
+            flash(btn || document.querySelector('#note-answer [data-solfege="' + solfege + '"]'),
+                  engineWasCorrect(before) ? "good" : "bad");
+        }
+        function submitChord() {
+            if (!uiState.selectedRoot || !uiState.selectedQuality) return;
+            const r = uiState.selectedRoot, q = uiState.selectedQuality;
+            const before = engineEnteredCount();
+            engine.inputElement({ type: "chord", root: r, quality: q });
+            const ok = engineWasCorrect(before);
+            flash(document.querySelector('#root-answer [data-root="' + r + '"]'), ok ? "good" : "bad");
+            flash(document.querySelector('#quality-answer [data-quality="' + q + '"]'), ok ? "good" : "bad");
+            clearChordSelection();
+        }
+
+        // small helpers to read back the just-recorded entry for flash feedback
+        let lastView = null;
+        function engineEnteredCount() { return lastView ? lastView.entered.length : 0; }
+        function engineWasCorrect(beforeCount) {
+            if (!lastView || lastView.entered.length <= beforeCount) return false;
+            const e = lastView.entered[beforeCount];
+            return e && e.correct;
+        }
+
+        function renderProgress(view) {
+            const dots = $("#progress-dots");
+            dots.textContent = "";
+            const n = view.length || (view.card ? view.card.length : 0);
+            for (let i = 0; i < n; i++) {
+                const d = document.createElement("span");
+                d.className = "dot";
+                if (view.phase === "show") {
+                    if (i === view.showIdx) d.classList.add("active");
+                    else if (i < view.showIdx) d.classList.add("filled");
+                } else if (view.phase === "recall") {
+                    if (i < view.entered.length) d.classList.add("filled");
+                } else if (view.phase === "reveal") {
+                    const e = view.entered[i];
+                    d.classList.add(e && e.correct ? "good" : "bad");
+                }
+                dots.appendChild(d);
+            }
+        }
+
+        function renderEntered(view) {
+            const box = $("#entered");
+            box.textContent = "";
+            const n = view.length || (view.card ? view.card.length : 0);
+            const reveal = view.phase === "reveal";
+            for (let i = 0; i < n; i++) {
+                const slot = document.createElement("div");
+                slot.className = "slot";
+                const entry = view.entered[i];
+                if (reveal) {
+                    const correct = view.card[i] ? elementLabel(view.card[i]) : "";
+                    if (entry && entry.correct) {
+                        slot.classList.add("has", "good");
+                        slot.textContent = correct;
+                    } else {
+                        slot.classList.add("has", "bad");
+                        slot.textContent = answerLabel(entry && entry.answer) || "—";
+                        const sub = document.createElement("small");
+                        sub.textContent = "→ " + correct;
+                        slot.appendChild(sub);
+                    }
+                } else if (entry) {
+                    slot.classList.add("has");
+                    slot.textContent = answerLabel(entry.answer);
+                } else {
+                    slot.textContent = (view.phase === "recall" && i === view.entered.length) ? "?" : "·";
+                }
+                box.appendChild(slot);
+            }
+        }
+
+        function renderBanner(view) {
+            const b = $("#phase-banner");
+            b.classList.remove("result-good", "result-bad");
+            if (view.phase === "show") b.textContent = "Watch the sequence — " + (view.showIdx + 1) + " / " + view.length;
+            else if (view.phase === "recall") b.textContent = "Your turn — repeat the sequence from memory";
+            else if (view.phase === "reveal") {
+                if (view.result && view.result.allCorrect) { b.textContent = "✓ Correct!"; b.classList.add("result-good"); }
+                else { b.textContent = "✗ Not quite — here's the sequence"; b.classList.add("result-bad"); }
+            } else { b.textContent = "Press Start to play"; }
+        }
+
+        function renderView(view) {
+            lastView = view;
+            renderBanner(view);
+            renderProgress(view);
+            renderEntered(view);
+            answerEnabled(view.phase === "recall");
+            if (view.phase !== "recall") clearChordSelection();
+        }
+
+        function writeHud(id, key, value) {
+            if (uiState.lastStats[key] === value) return;
+            uiState.lastStats[key] = value;
+            const e = document.getElementById(id);
+            if (e) e.textContent = String(value);
+        }
+        function updateHud(stats) {
+            writeHud("hud-score", "score", stats.score);
+            writeHud("hud-streak", "streak", stats.streak);
+            writeHud("hud-accuracy", "accuracy", stats.cards > 0 ? Math.round(stats.accuracy * 100) + "%" : "--%");
+            writeHud("hud-length", "length", stats.length);
+            writeHud("hud-flash", "flash", Math.round(stats.flashMs) + "ms");
+            writeHud("hud-highscore", "highScore", stats.highScore);
+        }
+
+        function setOverlay(running) {
+            uiState.running = running;
+            if (!uiState.overlay) return;
+            uiState.overlay.classList.toggle("hidden", running);
+            uiState.overlay.setAttribute("aria-hidden", running ? "true" : "false");
+            const sb = $("#btn-start"), pb = $("#btn-pause");
+            if (sb) sb.disabled = running;
+            if (pb) pb.disabled = !running;
+        }
+        function toggleSettings(force) {
+            const panel = $("#settings-panel"), backdrop = $("#settings-backdrop"), toggle = $("#settings-toggle");
+            if (!panel) return;
+            const show = force == null ? panel.hasAttribute("hidden") : !!force;
+            if (show) { panel.removeAttribute("hidden"); if (backdrop) backdrop.removeAttribute("hidden"); if (toggle) toggle.setAttribute("aria-expanded", "true"); }
+            else { panel.setAttribute("hidden", ""); if (backdrop) backdrop.setAttribute("hidden", ""); if (toggle) toggle.setAttribute("aria-expanded", "false"); }
+        }
+
+        function reconfigure() {
+            const ns = settings.update({});
+            engine.pause();
+            engine.applySettings(ns);
+            engine.reset();
+            setMode(ns.element);
+            setOverlay(false);
+        }
+
+        function syncControls(s) {
+            document.querySelectorAll('input[name="element"]').forEach(r => { r.checked = r.value === s.element; });
+            document.querySelectorAll('input[name="clef"]').forEach(r => { r.checked = r.value === s.clef; });
+            const len = $("#length"), lenOut = $("#length-output");
+            if (len) { len.value = String(s.length); if (lenOut) lenOut.textContent = String(s.length); }
+            const tier = $("#start-tier"), tierOut = $("#start-tier-output");
+            if (tier) { tier.value = String(s.startTier); if (tierOut) tierOut.textContent = String(s.startTier); }
+            document.querySelectorAll('#note-study input[data-note]').forEach(c => { c.checked = s.noteNames.indexOf(c.dataset.note) !== -1; });
+            document.querySelectorAll('#chord-study input[data-quality]').forEach(c => { c.checked = s.chordQualities.indexOf(c.dataset.quality) !== -1; });
+            document.querySelectorAll('#chord-study input[data-inversion]').forEach(c => { c.checked = s.chordInversions.indexOf(parseInt(c.dataset.inversion, 10)) !== -1; });
+            setMode(s.element);
+        }
+
+        function collectNotes() {
+            const out = [];
+            document.querySelectorAll('#note-study input[data-note]').forEach(c => { if (c.checked) out.push(c.dataset.note); });
+            return out.length ? out : SOLFEGE_ORDER.slice();
+        }
+        function collectQualities() {
+            const out = [];
+            document.querySelectorAll('#chord-study input[data-quality]').forEach(c => { if (c.checked) out.push(c.dataset.quality); });
+            return out.length ? out : ["maj"];
+        }
+        function collectInversions() {
+            const out = [];
+            document.querySelectorAll('#chord-study input[data-inversion]').forEach(c => { if (c.checked) out.push(parseInt(c.dataset.inversion, 10)); });
+            return out.length ? out : [0];
+        }
+
+        function init() {
+            engine.onStats(updateHud);
+            engine.onView(renderView);
+            uiState.overlay = $("#pause-overlay");
+
+            // note answer buttons
+            document.querySelectorAll('#note-answer .ans-btn').forEach(btn => {
+                on(btn, "click", () => { if (!btn.disabled) submitNote(btn.dataset.solfege, btn); });
+            });
+            // chord root + quality buttons
+            document.querySelectorAll('#root-answer .ans-btn').forEach(btn => {
+                on(btn, "click", () => {
+                    if (btn.disabled) return;
+                    uiState.selectedRoot = btn.dataset.root;
+                    document.querySelectorAll('#root-answer .ans-btn').forEach(b => b.classList.toggle("selected", b === btn));
+                    submitChord();
+                });
+            });
+            document.querySelectorAll('#quality-answer .ans-btn').forEach(btn => {
+                on(btn, "click", () => {
+                    if (btn.disabled) return;
+                    uiState.selectedQuality = btn.dataset.quality;
+                    document.querySelectorAll('#quality-answer .ans-btn').forEach(b => b.classList.toggle("selected", b === btn));
+                    submitChord();
+                });
+            });
+
+            // keyboard: digits answer notes / roots; space toggles pause
+            window.addEventListener("keydown", (e) => {
+                if (e.repeat) return;
+                const t = e.target;
+                if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) {
+                    if (!(t.tagName === "INPUT" && t.type === "range")) return;
+                }
+                if (e.key === "Escape") { toggleSettings(false); return; }
+                if (e.code === "Space") {
+                    e.preventDefault();
+                    if (engine.isRunning()) { engine.pause(); setOverlay(false); }
+                    else { engine.start(); setOverlay(true); }
+                    return;
+                }
+                const cur = settings.get();
+                if (NOTE_KEYS[e.key]) {
+                    e.preventDefault();
+                    if (cur.element === "chords") {
+                        const root = NOTE_KEYS[e.key];
+                        const btn = document.querySelector('#root-answer [data-root="' + root + '"]');
+                        if (btn && !btn.disabled) {
+                            uiState.selectedRoot = root;
+                            document.querySelectorAll('#root-answer .ans-btn').forEach(b => b.classList.toggle("selected", b === btn));
+                            submitChord();
+                        }
+                    } else {
+                        const btn = document.querySelector('#note-answer [data-solfege="' + NOTE_KEYS[e.key] + '"]');
+                        if (btn && !btn.disabled) submitNote(NOTE_KEYS[e.key], btn);
+                    }
+                }
+            });
+
+            // settings wiring
+            on($("#settings-toggle"), "click", () => toggleSettings());
+            on($("#settings-close"), "click", () => toggleSettings(false));
+            on($("#settings-backdrop"), "click", () => toggleSettings(false));
+
+            document.querySelectorAll('input[name="element"]').forEach(r => on(r, "change", () => { if (r.checked) { settings.update({ element: r.value }); reconfigure(); } }));
+            document.querySelectorAll('input[name="clef"]').forEach(r => on(r, "change", () => { if (r.checked) { settings.update({ clef: r.value }); reconfigure(); } }));
+
+            const len = $("#length"), lenOut = $("#length-output");
+            if (len) {
+                on(len, "input", () => { if (lenOut) lenOut.textContent = len.value; });
+                on(len, "change", () => { settings.update({ length: parseInt(len.value, 10) }); reconfigure(); });
+            }
+            const tier = $("#start-tier"), tierOut = $("#start-tier-output");
+            if (tier) {
+                on(tier, "input", () => { if (tierOut) tierOut.textContent = tier.value; });
+                on(tier, "change", () => { settings.update({ startTier: parseInt(tier.value, 10) }); reconfigure(); });
+            }
+            document.querySelectorAll('#note-study input[data-note]').forEach(c => on(c, "change", () => { settings.update({ noteNames: collectNotes() }); reconfigure(); }));
+            document.querySelectorAll('#chord-study input[data-quality]').forEach(c => on(c, "change", () => { settings.update({ chordQualities: collectQualities() }); reconfigure(); }));
+            document.querySelectorAll('#chord-study input[data-inversion]').forEach(c => on(c, "change", () => { settings.update({ chordInversions: collectInversions() }); reconfigure(); }));
+
+            on($("#btn-start"), "click", () => { engine.start(); setOverlay(true); });
+            on($("#btn-pause"), "click", () => { engine.pause(); setOverlay(false); });
+            on($("#btn-reset"), "click", () => { engine.reset(); });
+            on($("#btn-reset-highscore"), "click", () => { if (confirm("Reset high score?")) engine.resetHighScore(); });
+            on($("#btn-reset-mastery"), "click", () => { if (confirm("Reset training memory? This clears which elements you've practised.")) mastery.reset(); });
+            on(uiState.overlay, "click", () => { engine.start(); setOverlay(true); });
+            on(uiState.overlay, "keydown", (e) => { if (e.key === "Enter" || e.code === "Space") { e.preventDefault(); engine.start(); setOverlay(true); } });
+
+            syncControls(settings.get());
+            answerEnabled(false);
+            setOverlay(false);
+            queueMicrotask(() => setOverlay(true));
+        }
+        return { init };
+    })();
+
+    // ========================================================================
+    // boot
+    // ========================================================================
+    function boot() {
+        const svg = document.getElementById("staff-svg");
+        if (!svg) throw new Error("boot: #staff-svg not found");
+        const snap = settings.load();
+        staff.init({ svg: svg, clef: snap.clef });
+        engine.init({ settings: snap });
+        ui.init();
+        engine.start();
+    }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });
+    else boot();
+})();
+    </script>
+</body>
+</html>
