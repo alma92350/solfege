@@ -583,7 +583,9 @@ body { display: flex; flex-direction: column; }
         function makeClef(clef) {
             const g = el("g", { class: "staff-clef" });
             if (clef === "treble") {
-                const cy = yForStep(-2);
+                // The clef path's origin sits ~1.7 staff-gaps above its spiral, so
+                // lift it to wrap the G line (otherwise it hangs below the staff).
+                const cy = yForStep(-2) - state.staffLineGap * 1.7;
                 const scale = (state.staffLineGap * 4) / 80;
                 const cx = 28;
                 g.appendChild(el("path", {
