@@ -681,48 +681,25 @@ body { display: flex; flex-direction: column; }
             while (layer.firstChild) layer.removeChild(layer.firstChild);
         }
 
-        const TREBLE_PATH =
-            "M 5 -45 C -8 -30 -8 -10 6 -2 C 22 8 26 30 14 42 C 6 50 -6 48 -10 38 " +
-            "C -13 30 -7 22 2 22 C 12 22 18 30 16 40 C 14 48 8 52 0 52 " +
-            "M 6 -2 C -10 8 -10 30 6 38 " +
-            "M 6 -45 L 6 55 " +
-            "M 6 55 C 6 60 2 62 -1 60";
+        const TREBLE_PATH = "M 541 598 C 539 615 541 616 550 625 C 706 770 824 953 824 1174 C 824 1299 789 1423 730 1509 C 708 1541 671 1581 655 1581 C 635 1581 590 1544 562 1512 C 455 1394 420 1214 420 1064 C 420 981 431 887 441 828 C 444 811 445 808 428 793 C 220 622 0 416 0 125 C 0 -125 171 -363 524 -363 C 557 -363 595 -360 624 -354 C 639 -351 642 -350 645 -367 C 662 -464 684 -589 684 -657 C 684 -870 540 -896 455 -896 C 377 -896 340 -873 340 -854 C 340 -844 353 -840 386 -829 C 431 -816 482 -778 482 -694 C 482 -615 432 -547 344 -547 C 248 -547 190 -624 190 -713 C 190 -806 246 -948 464 -948 C 560 -948 747 -904 747 -660 C 747 -577 721 -441 706 -351 C 703 -334 704 -336 724 -327 C 870 -269 966 -147 966 16 C 966 200 831 363 619 363 C 582 363 582 363 577 389 Z M 677 1358 C 724 1358 763 1319 763 1240 C 763 1080 626 950 513 851 C 503 842 497 844 494 863 C 488 900 485 949 485 995 C 485 1220 589 1358 677 1358 Z M 520 377 C 524 350 524 351 498 343 C 372 300 289 186 289 63 C 289 -66 357 -158 455 -192 C 467 -196 484 -200 494 -200 C 505 -200 511 -193 511 -184 C 511 -174 500 -170 490 -166 C 429 -140 386 -78 386 -12 C 386 71 442 132 530 157 C 553 163 556 161 559 145 L 631 -284 C 634 -300 632 -300 611 -304 C 588 -308 559 -311 530 -311 C 278 -311 115 -171 115 29 C 115 114 130 228 249 363 C 336 459 402 513 469 567 C 484 579 487 577 490 562 Z M 619 148 C 616 166 618 170 635 168 C 752 158 848 60 848 -66 C 848 -157 793 -230 713 -271 C 696 -279 693 -279 690 -262 Z";
 
-        const BASS_PATH =
-            "M -8 -10 C 0 -16 14 -14 18 -4 C 22 6 18 18 8 22 C 0 25 -6 22 -10 16";
+        const BASS_PATH = "M 363 377 C 112 377 0 194 0 56 C 0 -59 60 -158 177 -158 C 268 -158 330 -95 330 -6 C 330 86 262 144 192 144 C 153 144 138 134 120 134 C 101 134 96 145 96 160 C 96 217 183 323 330 323 C 482 323 549 173 549 -53 C 549 -455 350 -680 14 -871 C 1 -878 -7 -886 -7 -897 C -7 -906 -1 -914 12 -914 C 19 -914 27 -912 36 -907 C 390 -734 765 -478 765 -40 C 765 210 612 377 363 377 Z M 906 259 C 861 259 827 225 827 180 C 827 135 861 101 906 101 C 950 101 985 135 985 180 C 985 225 950 259 906 259 Z M 907 -102 C 863 -102 829 -135 829 -180 C 829 -225 863 -258 907 -258 C 952 -258 985 -225 985 -180 C 985 -135 952 -102 907 -102 Z";
 
+        // Treble (G) and bass (F) clefs are Bravura (SMuFL, SIL OFL) glyph
+        // outlines. SMuFL units: 250 = one staff space; the glyph origin sits on
+        // the reference line (G line for treble, F line for bass), y-axis up — so
+        // we anchor it there and flip y with a negative scale.
         function makeClef(clef) {
             const g = el("g", { class: "staff-clef" });
-            if (clef === "treble") {
-                // The clef path's origin sits ~1.7 staff-gaps above its spiral, so
-                // lift it to wrap the G line (otherwise it hangs below the staff).
-                const cy = yForStep(-2) - state.staffLineGap * 1.7;
-                const scale = (state.staffLineGap * 4) / 80;
-                const cx = 28;
-                g.appendChild(el("path", {
-                    d: TREBLE_PATH,
-                    transform: "translate(" + cx + " " + cy + ") scale(" + scale + ")",
-                    fill: "currentColor", stroke: "currentColor",
-                    "stroke-width": 2.2, "stroke-linecap": "round",
-                    "stroke-linejoin": "round", "fill-rule": "nonzero",
-                    "fill-opacity": 0.0,
-                }));
-            } else {
-                const cy = yForStep(2);
-                const scale = (state.staffLineGap * 2.2) / 30;
-                const cx = 22;
-                g.appendChild(el("path", {
-                    d: BASS_PATH,
-                    transform: "translate(" + cx + " " + cy + ") scale(" + scale + ")",
-                    fill: "currentColor", stroke: "currentColor",
-                    "stroke-width": 3, "stroke-linecap": "round",
-                    "stroke-linejoin": "round", "fill-opacity": 0.0,
-                }));
-                const dotR = Math.max(1.6, state.staffLineGap * 0.18);
-                const dotX = cx + scale * 26;
-                g.appendChild(el("circle", { cx: dotX, cy: cy - state.staffLineGap / 2, r: dotR, fill: "currentColor" }));
-                g.appendChild(el("circle", { cx: dotX, cy: cy + state.staffLineGap / 2, r: dotR, fill: "currentColor" }));
-            }
+            const sc = state.staffLineGap / 250;
+            const isTreble = clef === "treble";
+            const refY = yForStep(isTreble ? -2 : 2);
+            const cx = isTreble ? 16 : 18;
+            g.appendChild(el("path", {
+                d: isTreble ? TREBLE_PATH : BASS_PATH,
+                fill: "currentColor",
+                transform: "translate(" + cx + " " + refY + ") scale(" + sc + " " + (-sc) + ")",
+            }));
             return g;
         }
 
