@@ -120,6 +120,46 @@ body { display: flex; flex-direction: column; }
     100% { background: var(--bg-elev); color: var(--fg); border-color: #3a414c; transform: scale(1); }
 }
 
+/* ===== piano keyboard mode (selects the chord root) ===== */
+.piano-keyboard {
+    position: relative; flex: 1 1 auto; height: auto; min-height: 200px;
+    background: #1e232b; border: 1px solid #2a2f37; border-radius: var(--radius);
+    overflow: hidden; display: flex; user-select: none;
+}
+.piano-keyboard[hidden] { display: none; }
+.piano-key { font-family: var(--font); border: none; cursor: pointer; padding: 0; margin: 0; transition: filter 80ms ease, transform 80ms ease; }
+.piano-key:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 3; }
+.piano-key.white {
+    position: relative; flex: 1 1 0; background: #f6f1e3; color: #1a1a1a;
+    border-right: 1px solid #c9c3b1; display: flex; flex-direction: column-reverse;
+    align-items: center; justify-content: flex-start; padding-bottom: 10px; gap: 2px;
+}
+.piano-key.white:last-of-type { border-right: none; }
+.piano-key.white .piano-label { font-size: 1rem; font-weight: 700; letter-spacing: 0.04em; }
+.piano-key.white .piano-sub   { font-size: 0.7rem; color: #777; margin-bottom: 2px; font-weight: 500; }
+.piano-key.white:hover { background: #ebe5d2; }
+.piano-key.white.pressed { background: #d9d2bc; transform: translateY(1px); }
+.piano-key.white.selected { background: #ffe2a6; box-shadow: inset 0 0 0 2px var(--accent-hot); }
+.piano-key.black {
+    position: absolute; top: 0; width: 13%; height: 50%; background: #16181c; color: #e8eaee;
+    border-radius: 0 0 5px 5px; z-index: 2; display: flex; align-items: flex-end;
+    justify-content: center; padding-bottom: 8px; box-shadow: 0 2px 0 #000;
+}
+.piano-key.black .piano-sub { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.04em; }
+.piano-key.black:hover { background: #2a2d33; }
+.piano-key.black.pressed { background: #3a3d44; transform: translateY(1px); box-shadow: 0 1px 0 #000; }
+.piano-key.black.selected { background: #5a4a22; box-shadow: inset 0 0 0 2px var(--accent-hot); }
+/* Centered on each white-key boundary; -6.5% nudges by half the black-key width */
+.piano-key.bk-1 { left: calc(100% / 7 - 6.5%); }   /* C#  → DO  */
+.piano-key.bk-2 { left: calc(200% / 7 - 6.5%); }   /* D#  → RE  */
+.piano-key.bk-3 { left: calc(400% / 7 - 6.5%); }   /* F#  → FA  */
+.piano-key.bk-4 { left: calc(500% / 7 - 6.5%); }   /* G#  → SOL */
+.piano-key.bk-5 { left: calc(600% / 7 - 6.5%); }   /* A#/Bb → SI */
+.piano-key.flash-good { animation: piano-flash-good 280ms ease-out; }
+.piano-key.flash-bad  { animation: piano-flash-bad  280ms ease-out; }
+@keyframes piano-flash-good { 0% { background: var(--good); color: #0b1410; } 100% { } }
+@keyframes piano-flash-bad  { 0% { background: var(--bad); color: #2a0a0a; } 100% { } }
+
 .settings-panel {
     position: fixed; top: 0; right: 0; width: min(360px, 90vw); height: 100vh;
     background: var(--bg-elev); border-left: 1px solid #2a2f37;
@@ -226,6 +266,10 @@ body { display: flex; flex-direction: column; }
     .ans-btn { padding: 12px 0; }
     .ans-btn .ans-name { font-size: 1rem; }
     .ans-btn .ans-key  { font-size: 0.6rem; }
+    .piano-keyboard { height: auto; min-height: 220px; }
+    .piano-key.white .piano-label { font-size: 1.05rem; }
+    .piano-key.white .piano-sub   { font-size: 0.66rem; }
+    .piano-key.black .piano-sub   { font-size: 0.6rem; }
 }
     </style>
 </head>
@@ -275,6 +319,20 @@ body { display: flex; flex-direction: column; }
                 <button class="ans-btn" data-root="LA">LA</button>
                 <button class="ans-btn" data-root="SI">SI</button>
             </div>
+            <section id="piano-keyboard" class="piano-keyboard" aria-label="Piano keyboard (chord root)" hidden>
+                <button class="piano-key white" data-root="DO"  aria-label="Root DO (C)"><span class="piano-label">DO</span><span class="piano-sub">C</span></button>
+                <button class="piano-key white" data-root="RE"  aria-label="Root RE (D)"><span class="piano-label">RE</span><span class="piano-sub">D</span></button>
+                <button class="piano-key white" data-root="MI"  aria-label="Root MI (E)"><span class="piano-label">MI</span><span class="piano-sub">E</span></button>
+                <button class="piano-key white" data-root="FA"  aria-label="Root FA (F)"><span class="piano-label">FA</span><span class="piano-sub">F</span></button>
+                <button class="piano-key white" data-root="SOL" aria-label="Root SOL (G)"><span class="piano-label">SOL</span><span class="piano-sub">G</span></button>
+                <button class="piano-key white" data-root="LA"  aria-label="Root LA (A)"><span class="piano-label">LA</span><span class="piano-sub">A</span></button>
+                <button class="piano-key white" data-root="SI"  aria-label="Root SI (B)"><span class="piano-label">SI</span><span class="piano-sub">B</span></button>
+                <button class="piano-key black bk-1" data-root="DO"  data-sol-sub="DO♯" data-letter-sub="C♯" aria-label="Root DO sharp (C#)"><span class="piano-sub">DO♯</span></button>
+                <button class="piano-key black bk-2" data-root="RE"  data-sol-sub="RE♯" data-letter-sub="D♯" aria-label="Root RE sharp (D#)"><span class="piano-sub">RE♯</span></button>
+                <button class="piano-key black bk-3" data-root="FA"  data-sol-sub="FA♯" data-letter-sub="F♯" aria-label="Root FA sharp (F#)"><span class="piano-sub">FA♯</span></button>
+                <button class="piano-key black bk-4" data-root="SOL" data-sol-sub="SOL♯" data-letter-sub="G♯" aria-label="Root SOL sharp (G#)"><span class="piano-sub">SOL♯</span></button>
+                <button class="piano-key black bk-5" data-root="SI"  data-sol-sub="SI♭" data-letter-sub="B♭" aria-label="Root SI flat (B♭)"><span class="piano-sub">SI♭</span></button>
+            </section>
             <div id="quality-buttons" class="answer-row quality-row" aria-label="Chord quality">
                 <button class="ans-btn" data-quality="maj">Major</button>
                 <button class="ans-btn" data-quality="min">Minor</button>
@@ -294,6 +352,11 @@ body { display: flex; flex-direction: column; }
             <legend>Clef</legend>
             <label><input type="radio" name="clef" value="treble" checked> Clef de Sol (Treble)</label>
             <label><input type="radio" name="clef" value="bass"> Clef de Fa (Bass)</label>
+        </fieldset>
+        <fieldset>
+            <legend>Root Input</legend>
+            <label><input type="radio" name="answer-layout" value="buttons" checked> Root Buttons</label>
+            <label><input type="radio" name="answer-layout" value="piano"> Piano Keyboard</label>
         </fieldset>
         <fieldset>
             <legend>Note Names</legend>
@@ -363,7 +426,7 @@ body { display: flex; flex-direction: column; }
         const SETTINGS_KEY = "chords.settings.v1";
         const ALL_QUALITIES = ["maj", "min", "dim", "aug"];
         const DEFAULTS = Object.freeze({
-            clef: "treble", startTier: 1, notation: "solfege", speed: 50,
+            clef: "treble", startTier: 1, notation: "solfege", speed: 50, answerLayout: "buttons",
             studyQualities: ["maj", "min", "dim"], studyInversions: [0],
         });
         let current = null;
@@ -386,6 +449,7 @@ body { display: flex; flex-direction: column; }
                 const t = parseInt(raw.startTier, 10);
                 if (Number.isFinite(t) && t >= 1) out.startTier = t;
                 if (raw.notation === "solfege" || raw.notation === "letters") out.notation = raw.notation;
+                if (raw.answerLayout === "buttons" || raw.answerLayout === "piano") out.answerLayout = raw.answerLayout;
                 const sp = parseInt(raw.speed, 10);
                 if (Number.isFinite(sp)) out.speed = Math.min(250, Math.max(40, sp));
                 out.studyQualities = sanitizeList(raw.studyQualities, ALL_QUALITIES, DEFAULTS.studyQualities);
@@ -1300,11 +1364,31 @@ body { display: flex; flex-direction: column; }
         }
 
         function applyNotation(notation) {
+            const useLetters = notation === "letters";
             document.querySelectorAll(".ans-btn[data-root]").forEach((btn) => {
                 const root = btn.dataset.root;
                 const nameEl = btn.querySelector(".ans-name");
                 if (nameEl) nameEl.textContent = nameFor(root, notation);
             });
+            document.querySelectorAll(".piano-key.white").forEach((k) => {
+                const root = k.dataset.root;
+                const labelEl = k.querySelector(".piano-label");
+                const subEl = k.querySelector(".piano-sub");
+                if (labelEl) labelEl.textContent = useLetters ? (LETTER_OF[root] || root) : root;
+                if (subEl) subEl.textContent = useLetters ? root : (LETTER_OF[root] || "");
+            });
+            document.querySelectorAll(".piano-key.black").forEach((k) => {
+                const subEl = k.querySelector(".piano-sub");
+                if (subEl) subEl.textContent = useLetters ? (k.dataset.letterSub || "") : (k.dataset.solSub || "");
+            });
+        }
+
+        function setAnswerLayout(layout) {
+            const btns = document.getElementById("root-buttons");
+            const piano = document.getElementById("piano-keyboard");
+            if (!btns || !piano) return;
+            if (layout === "piano") { btns.setAttribute("hidden", ""); piano.removeAttribute("hidden"); }
+            else { piano.setAttribute("hidden", ""); btns.removeAttribute("hidden"); }
         }
 
         function pressEl(el) {
@@ -1325,12 +1409,14 @@ body { display: flex; flex-direction: column; }
         function clearSelection() {
             uiState.selectedRoot = null;
             uiState.selectedQuality = null;
-            document.querySelectorAll(".ans-btn.selected").forEach(b => b.classList.remove("selected"));
+            document.querySelectorAll(".selected").forEach(b => b.classList.remove("selected"));
         }
 
         function selectRoot(root) {
             uiState.selectedRoot = root;
-            document.querySelectorAll(".ans-btn[data-root]").forEach((b) => {
+            // [data-root] matches both the root buttons and the piano keys, so the
+            // chosen root stays highlighted in whichever layout is active.
+            document.querySelectorAll("[data-root]").forEach((b) => {
                 b.classList.toggle("selected", b.dataset.root === root);
             });
             maybeSubmit();
@@ -1402,6 +1488,18 @@ body { display: flex; flex-direction: column; }
             });
             document.querySelectorAll(".ans-btn[data-quality]").forEach((btn) => {
                 on(btn, "click", () => { pressEl(btn); selectQuality(btn.dataset.quality); });
+            });
+            // Piano keys pick the chord root, mirroring the root buttons.
+            document.querySelectorAll(".piano-key").forEach((k) => {
+                on(k, "click", () => { const root = k.dataset.root; if (!root) return; pressEl(k); selectRoot(root); });
+            });
+
+            document.querySelectorAll('input[name="answer-layout"]').forEach((radio) => {
+                on(radio, "change", () => {
+                    if (!radio.checked) return;
+                    settings.update({ answerLayout: radio.value });
+                    setAnswerLayout(radio.value);
+                });
             });
 
             document.querySelectorAll('input[name="notation"]').forEach((radio) => {
@@ -1561,6 +1659,11 @@ body { display: flex; flex-direction: column; }
                     r.checked = (r.value === notation);
                 });
                 applyNotation(notation);
+                const layout = cur.answerLayout || "buttons";
+                document.querySelectorAll('input[name="answer-layout"]').forEach((r) => {
+                    r.checked = (r.value === layout);
+                });
+                setAnswerLayout(layout);
                 applyStudyToUI({
                     qualities: cur.studyQualities || ["maj", "min", "dim"],
                     inversions: cur.studyInversions || [0],
