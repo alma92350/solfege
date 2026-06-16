@@ -305,7 +305,7 @@ body { display: flex; flex-direction: column; }
                 <div class="pause-overlay-inner">
                     <div class="pause-overlay-icon">&#9654;</div>
                     <div class="pause-overlay-text">Click to Start</div>
-                    <div class="pause-overlay-hint">(Space toggles pause)</div>
+                    <div class="pause-overlay-hint">(Click the staff or press Space to pause)</div>
                 </div>
             </div>
         </section>
@@ -1612,7 +1612,12 @@ body { display: flex; flex-direction: column; }
             });
 
             uiState.overlay = $("#pause-overlay");
-            on(uiState.overlay, "click", () => { engine.start(); setOverlay(true); });
+            // Clicking anywhere on the staff toggles the session, mirroring Space:
+            // it starts from the overlay, and pauses/resumes the scroll while running.
+            on($("#staff-container"), "click", () => {
+                if (uiState.running) { engine.pause(); setOverlay(false); }
+                else { engine.start(); setOverlay(true); }
+            });
 
             engine.onStatsChange(updateHud);
             engine.onJudgment(flashFeedback);

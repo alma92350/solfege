@@ -225,7 +225,7 @@ body { display: flex; flex-direction: column; }
                 <div class="pause-overlay-inner">
                     <div class="pause-overlay-icon">&#9654;</div>
                     <div class="pause-overlay-text">Click to Start</div>
-                    <div class="pause-overlay-hint">Watch the flashed sequence, then play it back from memory. (Space toggles pause.)</div>
+                    <div class="pause-overlay-hint">Watch the flashed sequence, then play it back from memory. (Space pauses · R or a tap on the staff replays it.)</div>
                 </div>
             </div>
         </section>
@@ -288,6 +288,11 @@ body { display: flex; flex-direction: column; }
             <legend>Clef</legend>
             <label><input type="radio" name="clef" value="treble" checked> Clef de Sol (Treble)</label>
             <label><input type="radio" name="clef" value="bass"> Clef de Fa (Bass)</label>
+        </fieldset>
+        <fieldset>
+            <legend>Display</legend>
+            <label><input type="radio" name="display" value="sequence" checked> One at a time (sequence)</label>
+            <label><input type="radio" name="display" value="together"> All at once</label>
         </fieldset>
         <fieldset id="note-study">
             <legend>Note Study Set</legend>
@@ -366,6 +371,7 @@ body { display: flex; flex-direction: column; }
         const KEY = "flash.settings.v1";
         const DEFAULTS = Object.freeze({
             element: "notes", length: 3, clef: "treble", startTier: 1,
+            display: "sequence",
             noteNames: SOLFEGE_ORDER.slice(),
             chordQualities: ["maj", "min", "dim"], chordInversions: [0],
         });
@@ -379,6 +385,7 @@ body { display: flex; flex-direction: column; }
                 const len = parseInt(raw.length, 10);
                 if (Number.isFinite(len)) out.length = Math.min(5, Math.max(1, len));
                 if (raw.clef === "treble" || raw.clef === "bass") out.clef = raw.clef;
+                if (raw.display === "sequence" || raw.display === "together") out.display = raw.display;
                 const t = parseInt(raw.startTier, 10);
                 if (Number.isFinite(t)) out.startTier = Math.min(4, Math.max(1, t));
                 if (Array.isArray(raw.noteNames)) {
@@ -704,21 +711,38 @@ body { display: flex; flex-direction: column; }
         function setClef(clef) { state.clef = clef === "bass" ? "bass" : "treble"; drawStatic(); clear(); }
         function renderCurrent() {
             clearLayer(state.notesLayer);
-            if (!state.current) return;
-            const g = makeEl(state.current);
-            g.setAttribute("transform", "translate(" + state.centerX + " 0)");
-            state.notesLayer.appendChild(g);
+            const list = state.current;
+            if (!list || !list.length) return;
+            if (list.length === 1) {
+                const g = makeEl(list[0]);
+                g.setAttribute("transform", "translate(" + state.centerX + " 0)");
+                state.notesLayer.appendChild(g);
+                return;
+            }
+            // "All at once" mode: spread the elements evenly across the staff,
+            // leaving room for the clef on the left and a small right margin.
+            const x0 = state.staffLineGap * 7;
+            const x1 = state.width - state.staffLineGap * 3;
+            const span = Math.max(1, x1 - x0);
+            for (let i = 0; i < list.length; i++) {
+                const g = makeEl(list[i]);
+                const x = x0 + span * (i + 0.5) / list.length;
+                g.setAttribute("transform", "translate(" + Math.round(x) + " 0)");
+                state.notesLayer.appendChild(g);
+            }
         }
-        function show(element) { state.current = element || null; renderCurrent(); }
+        function show(element) { state.current = element ? [element] : null; renderCurrent(); }
+        function showAll(els) { state.current = (els && els.length) ? els.slice() : null; renderCurrent(); }
         function clear() { state.current = null; clearLayer(state.notesLayer); }
-        return { init, setClef, show, clear };
+        return { init, setClef, show, showAll, clear };
     })();
 
     // ========================================================================
     // engine module (flashcard sequencer + mastery-gated flash speed)
     // ========================================================================
     const engine = (function () {
-        const FLASH_START = 850;   // ms each element is shown, at the slowest level
+        const FLASH_START_SEQ = 850;   // ms each element is shown (sequence mode), slowest level
+        const FLASH_START_ALL = 1000;  // ms the whole card is shown (all-at-once mode), slowest level
         const FLASH_MIN = 260;     // fastest the flashing can get
         const FLASH_STEP = 0.85;   // multiply flash time per speed milestone
         const GAP_MS = 200;        // blank gap between flashed elements
@@ -733,12 +757,16 @@ body { display: flex; flex-direction: column; }
             settings: null, running: false, rafId: 0, lastMs: 0,
             phase: "idle", card: [], showIdx: 0, showOn: false, phaseMs: 0,
             entered: [], lastResult: null,
-            tier: 1, flashMs: FLASH_START, levelMastery: {},
+            tier: 1, flashMs: FLASH_START_SEQ, levelMastery: {},
             score: 0, streak: 0, totalCards: 0, window: [], highScore: 0,
             statsListener: null, viewListener: null, lastStatsSig: "",
         };
 
         function clefOf() { return (st.settings && st.settings.clef) || "treble"; }
+        function allAtOnce() { return !!(st.settings && st.settings.display === "together"); }
+        // Slowest flash duration depends on the display mode: a touch longer when the
+        // whole card is shown together, since there's more to take in at once.
+        function flashBase() { return allAtOnce() ? FLASH_START_ALL : FLASH_START_SEQ; }
         function rollingAccuracy() {
             if (!st.window.length) return 1.0;
             let s = 0; for (let i = 0; i < st.window.length; i++) s += st.window[i];
@@ -762,7 +790,7 @@ body { display: flex; flex-direction: column; }
             st.viewListener({
                 kind: kind, phase: st.phase, length: st.card.length,
                 showIdx: st.showIdx, entered: st.entered.slice(),
-                card: st.card, result: st.lastResult,
+                card: st.card, result: st.lastResult, allAtOnce: allAtOnce(),
             });
         }
 
@@ -792,15 +820,28 @@ body { display: flex; flex-direction: column; }
 
         function startCard() {
             st.card = elements.buildCard(st.settings, st.tier, weightFn);
-            st.entered = [];
-            st.lastResult = null;
+            replayCard(true);
+            emitStats();
+        }
+
+        // Show the current card from the start. `fresh` clears any entered answers
+        // (new card or a manual replay); otherwise it just re-runs the animation.
+        function replayCard(fresh) {
+            if (fresh) { st.entered = []; st.lastResult = null; }
             st.phase = "show";
             st.showIdx = 0;
             st.showOn = true;
             st.phaseMs = 0;
-            staff.show(st.card[0]);
+            if (allAtOnce()) staff.showAll(st.card);
+            else staff.show(st.card[0]);
             emitView("show");
-            emitStats();
+        }
+
+        // Player asks to see the sequence again (during show or recall).
+        function replay() {
+            if (!st.running || !st.card.length) return;
+            if (st.phase !== "show" && st.phase !== "recall") return;
+            replayCard(true);
         }
 
         function beginRecall() {
@@ -854,7 +895,14 @@ body { display: flex; flex-direction: column; }
         function step(dtMs) {
             if (st.phase === "show") {
                 st.phaseMs += dtMs;
-                if (st.showOn && st.phaseMs >= st.flashMs) {
+                if (allAtOnce()) {
+                    // Whole card is on screen; hold it, then go straight to recall.
+                    if (st.showOn && st.phaseMs >= st.flashMs) {
+                        st.showOn = false; st.phaseMs = 0; staff.clear(); emitView("gap");
+                    } else if (!st.showOn && st.phaseMs >= GAP_MS) {
+                        st.phaseMs = 0; beginRecall();
+                    }
+                } else if (st.showOn && st.phaseMs >= st.flashMs) {
                     st.showOn = false; st.phaseMs = 0; staff.clear(); emitView("gap");
                 } else if (!st.showOn && st.phaseMs >= GAP_MS) {
                     st.showIdx += 1; st.phaseMs = 0;
@@ -878,7 +926,7 @@ body { display: flex; flex-direction: column; }
         function init(opts) {
             st.settings = opts.settings;
             st.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP, st.settings.startTier || 1));
-            st.flashMs = FLASH_START;
+            st.flashMs = flashBase();
             mastery.load();
             st.highScore = loadHigh();
             emitStats();
@@ -903,7 +951,7 @@ body { display: flex; flex-direction: column; }
             st.score = 0; st.streak = 0; st.totalCards = 0; st.window = [];
             st.levelMastery = {};
             st.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP, (st.settings && st.settings.startTier) || 1));
-            st.flashMs = FLASH_START;
+            st.flashMs = flashBase();
             st.lastStatsSig = "";
             staff.clear();
             emitStats();
@@ -936,7 +984,7 @@ body { display: flex; flex-direction: column; }
         function isRunning() { return st.running; }
         function onStats(fn) { st.statsListener = typeof fn === "function" ? fn : null; }
         function onView(fn) { st.viewListener = typeof fn === "function" ? fn : null; }
-        return { init, start, pause, reset, applySettings, inputElement, getStats,
+        return { init, start, pause, reset, replay, applySettings, inputElement, getStats,
                  resetHighScore, isRunning, onStats, onView };
     })();
 
@@ -1019,7 +1067,8 @@ body { display: flex; flex-direction: column; }
                 const d = document.createElement("span");
                 d.className = "dot";
                 if (view.phase === "show") {
-                    if (i === view.showIdx) d.classList.add("active");
+                    if (view.allAtOnce) d.classList.add("active");
+                    else if (i === view.showIdx) d.classList.add("active");
                     else if (i < view.showIdx) d.classList.add("filled");
                 } else if (view.phase === "recall") {
                     if (i < view.entered.length) d.classList.add("filled");
@@ -1065,8 +1114,12 @@ body { display: flex; flex-direction: column; }
         function renderBanner(view) {
             const b = $("#phase-banner");
             b.classList.remove("result-good", "result-bad");
-            if (view.phase === "show") b.textContent = "Watch the sequence — " + (view.showIdx + 1) + " / " + view.length;
-            else if (view.phase === "recall") b.textContent = "Your turn — repeat the sequence from memory";
+            if (view.phase === "show") {
+                b.textContent = view.allAtOnce
+                    ? "Memorize the " + view.length + " — they vanish in a moment"
+                    : "Watch the sequence — " + (view.showIdx + 1) + " / " + view.length;
+            }
+            else if (view.phase === "recall") b.textContent = "Your turn — repeat from memory (click staff to see again)";
             else if (view.phase === "reveal") {
                 if (view.result && view.result.allCorrect) { b.textContent = "✓ Correct!"; b.classList.add("result-good"); }
                 else { b.textContent = "✗ Not quite — here's the sequence"; b.classList.add("result-bad"); }
@@ -1126,6 +1179,7 @@ body { display: flex; flex-direction: column; }
         function syncControls(s) {
             document.querySelectorAll('input[name="element"]').forEach(r => { r.checked = r.value === s.element; });
             document.querySelectorAll('input[name="clef"]').forEach(r => { r.checked = r.value === s.clef; });
+            document.querySelectorAll('input[name="display"]').forEach(r => { r.checked = r.value === s.display; });
             const len = $("#length"), lenOut = $("#length-output");
             if (len) { len.value = String(s.length); if (lenOut) lenOut.textContent = String(s.length); }
             const tier = $("#start-tier"), tierOut = $("#start-tier-output");
@@ -1193,6 +1247,11 @@ body { display: flex; flex-direction: column; }
                     else { engine.start(); setOverlay(true); }
                     return;
                 }
+                if (e.key === "r" || e.key === "R") {
+                    e.preventDefault();
+                    engine.replay();
+                    return;
+                }
                 const cur = settings.get();
                 if (NOTE_KEYS[e.key]) {
                     e.preventDefault();
@@ -1218,6 +1277,7 @@ body { display: flex; flex-direction: column; }
 
             document.querySelectorAll('input[name="element"]').forEach(r => on(r, "change", () => { if (r.checked) { settings.update({ element: r.value }); reconfigure(); } }));
             document.querySelectorAll('input[name="clef"]').forEach(r => on(r, "change", () => { if (r.checked) { settings.update({ clef: r.value }); reconfigure(); } }));
+            document.querySelectorAll('input[name="display"]').forEach(r => on(r, "change", () => { if (r.checked) { settings.update({ display: r.value }); reconfigure(); } }));
 
             const len = $("#length"), lenOut = $("#length-output");
             if (len) {
@@ -1238,7 +1298,12 @@ body { display: flex; flex-direction: column; }
             on($("#btn-reset"), "click", () => { engine.reset(); });
             on($("#btn-reset-highscore"), "click", () => { if (confirm("Reset high score?")) engine.resetHighScore(); });
             on($("#btn-reset-mastery"), "click", () => { if (confirm("Reset training memory? This clears which elements you've practised.")) mastery.reset(); });
-            on(uiState.overlay, "click", () => { engine.start(); setOverlay(true); });
+            // Clicking the staff starts the game from the overlay; while running it
+            // replays the sequence so the player can watch it again from memory.
+            on($("#staff-container"), "click", () => {
+                if (engine.isRunning()) engine.replay();
+                else { engine.start(); setOverlay(true); }
+            });
             on(uiState.overlay, "keydown", (e) => { if (e.key === "Enter" || e.code === "Space") { e.preventDefault(); engine.start(); setOverlay(true); } });
 
             syncControls(settings.get());
