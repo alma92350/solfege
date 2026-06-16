@@ -51,7 +51,9 @@ body { display: flex; flex-direction: column; }
 .settings-toggle:hover { background: #2a313b; }
 .app-main { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: var(--pad); gap: var(--pad); }
 .staff-container {
-    position: relative; flex: 1 1 auto; min-height: 240px;
+    /* Capped so the staff stays compact and hands the slack to the answer keys
+       below — a taller input area matters most on a phone in portrait. */
+    position: relative; flex: 1 1 auto; min-height: 140px; max-height: 38vh;
     background: var(--bg-staff); border-radius: var(--radius); overflow: hidden;
     box-shadow: inset 0 0 0 1px #d6d0bf;
 }
@@ -122,7 +124,7 @@ body { display: flex; flex-direction: column; }
 .entered .slot small { display: block; font-size: 0.62rem; color: var(--fg-muted); font-weight: 500; }
 
 /* answer rows (shared with note + chord input) */
-.answer-row { flex: 0 0 auto; display: grid; gap: var(--pad); }
+.answer-row { flex: 1 1 auto; display: grid; grid-auto-rows: 1fr; gap: var(--pad); }
 .note-row   { grid-template-columns: repeat(7, 1fr); }
 .root-row   { grid-template-columns: repeat(7, 1fr); }
 .quality-row{ grid-template-columns: repeat(4, 1fr); }
