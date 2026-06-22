@@ -838,7 +838,12 @@ body { display: flex; flex-direction: column; }
         const FLASH_START_SEQ = 850;   // ms each element is shown (sequence mode), slowest level
         const FLASH_START_ALL = 1000;  // ms the whole card is shown (all-at-once mode), slowest level
         const FLASH_MIN = 260;     // fastest the flashing can get
-        const FLASH_STEP = 0.85;   // multiply flash time per speed milestone
+        // Linear, never-accelerating speed control (see registerOutcome): flashing
+        // gets FLASH_STEP_MS faster every ADVANCE_AFTER correct in a row, and slower
+        // again after ERROR_DROP_AT misses in a row.
+        const ADVANCE_AFTER = 8;
+        const FLASH_STEP_MS = 50;
+        const ERROR_DROP_AT = 2;
         const GAP_MS = 200;        // blank gap between flashed elements
         const REVEAL_MS = 1600;    // how long the result is shown before the next card
         const LEVEL_ALPHA = 0.25;
@@ -852,6 +857,7 @@ body { display: flex; flex-direction: column; }
             phase: "idle", card: [], showIdx: 0, showOn: false, phaseMs: 0,
             entered: [], lastResult: null,
             tier: 1, flashMs: FLASH_START_SEQ, levelMastery: {},
+            correctRun: 0, errorRun: 0,
             score: 0, streak: 0, totalCards: 0, window: [], highScore: 0,
             statsListener: null, viewListener: null, lastStatsSig: "",
         };
@@ -900,14 +906,32 @@ body { display: flex; flex-direction: column; }
             for (let i = 0; i < keys.length; i++) if ((st.levelMastery[keys[i]] || 0) < LEVEL_MASTERED) return false;
             return true;
         }
-        // Learn every element first (introduce new material via the level), then
-        // make the flashing faster — re-proving mastery after each step.
-        function maybeAdvance() {
+        // Tier (which elements appear) stays mastery-gated; speed is separate.
+        function maybeAdvanceTier() {
             if (!levelAllMastered()) return;
             if (st.tier < TIER_CAP) st.tier += 1;                                    // introduce new elements
-            else st.flashMs = Math.max(FLASH_MIN, st.flashMs * FLASH_STEP);          // then flash faster
             st.levelMastery = {};
             st.window = [];
+        }
+
+        function clampFlash(v) { return Math.min(flashBase(), Math.max(FLASH_MIN, v)); }
+        function speedUp() { st.flashMs = clampFlash(st.flashMs - FLASH_STEP_MS); }   // flash faster
+        function speedDown() { st.flashMs = clampFlash(st.flashMs + FLASH_STEP_MS); } // flash slower
+
+        // Linear, never-accelerating speed response per recalled element:
+        //  - every ADVANCE_AFTER correct in a row flashes faster;
+        //  - a single miss resets that count;
+        //  - ERROR_DROP_AT misses in a row flash slower, easing off until recovery.
+        function registerOutcome(hit) {
+            if (hit) {
+                st.errorRun = 0;
+                st.correctRun += 1;
+                if (st.correctRun >= ADVANCE_AFTER) { st.correctRun = 0; speedUp(); }
+            } else {
+                st.correctRun = 0;
+                st.errorRun += 1;
+                if (st.errorRun >= ERROR_DROP_AT) speedDown();
+            }
         }
 
         function weightFn(key) { return mastery.weightFor(clefOf(), key); }
@@ -958,7 +982,7 @@ body { display: flex; flex-direction: column; }
                 pushOutcome(false);
             }
             st.lastResult = { allCorrect: allCorrect };
-            maybeAdvance();
+            maybeAdvanceTier();
             st.phase = "reveal";
             st.phaseMs = 0;
             staff.clear();
@@ -975,6 +999,7 @@ body { display: flex; flex-direction: column; }
             const correct = answersMatch(answer, expected.answer);
             mastery.recordOutcome(clefOf(), expected.key, correct);
             levelBump(expected.key, correct);
+            registerOutcome(correct);
             st.entered.push({ answer: answer, correct: correct, expected: expected.answer });
             emitView("entry");
             if (st.entered.length >= st.card.length) judgeCard();
@@ -1044,6 +1069,7 @@ body { display: flex; flex-direction: column; }
             st.showIdx = 0; st.showOn = false; st.phaseMs = 0;
             st.score = 0; st.streak = 0; st.totalCards = 0; st.window = [];
             st.levelMastery = {};
+            st.correctRun = 0; st.errorRun = 0;
             st.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP, (st.settings && st.settings.startTier) || 1));
             st.flashMs = flashBase();
             st.lastStatsSig = "";
@@ -1242,7 +1268,7 @@ body { display: flex; flex-direction: column; }
             if (e) e.textContent = String(value);
         }
         // Streak bar fills toward a "hot streak" goal, then pulses once maxed.
-        const STREAK_GOAL = 10;
+        const STREAK_GOAL = 8;
         function setStreakBar(streak) {
             const s = Math.max(0, streak || 0);
             const fill = document.getElementById("streak-fill");

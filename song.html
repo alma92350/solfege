@@ -811,6 +811,11 @@ body { display: flex; flex-direction: column; }
         const WINDOW_SIZE = 20;
         const MIN_NOTE_GAP_PX = 120;
         const HIGH_SCORE_KEY = "solfege.song.highScore";
+        // Linear, never-accelerating speed control (see registerOutcome).
+        const ADVANCE_AFTER = 8;      // correct-in-a-row needed to step the speed up
+        const SPEED_STEP = 10;        // px/s added/removed per step (linear, constant)
+        const ERROR_DROP_AT = 2;      // consecutive errors that trigger a slow-down
+        const MISS_RESTART_AT = 2;    // consecutive missed notes that reset the board
 
         const engineState = {
             staff: null, notesMod: null, settings: null,
@@ -818,6 +823,7 @@ body { display: flex; flex-direction: column; }
             running: false, rafId: 0, lastFrameMs: 0,
             nextId: 1, activeNotes: [], seqIndex: 0,
             speed: BASE_SPEED,
+            correctRun: 0, errorRun: 0, missRun: 0,
             score: 0, streak: 0, highScore: 0,
             judged: 0, loops: 0,
             window: [],
@@ -925,6 +931,46 @@ body { display: flex; flex-direction: column; }
             }
         }
 
+        function speedUp() { engineState.speed = clampSpeed(engineState.speed + SPEED_STEP); }
+        function speedDown() { engineState.speed = clampSpeed(engineState.speed - SPEED_STEP); }
+
+        // Clear the board so notes respawn from the right at the current (lower) speed.
+        function restartFromRight() {
+            engineState.activeNotes = [];
+            engineState.timeSinceLastSpawn = 999;
+        }
+
+        // Linear, never-accelerating speed response to each judged note:
+        //  - every ADVANCE_AFTER correct in a row steps the speed up once;
+        //  - a single error resets the correct counter;
+        //  - ERROR_DROP_AT errors in a row drop the speed, and keep dropping it
+        //    on each further error until the player gets one right;
+        //  - MISS_RESTART_AT missed notes in a row also reset the board.
+        function registerOutcome(kind) {
+            if (kind === "hit") {
+                engineState.errorRun = 0;
+                engineState.missRun = 0;
+                engineState.correctRun += 1;
+                if (engineState.correctRun >= ADVANCE_AFTER) {
+                    engineState.correctRun = 0;
+                    speedUp();
+                }
+                return;
+            }
+            engineState.correctRun = 0;
+            engineState.errorRun += 1;
+            if (engineState.errorRun >= ERROR_DROP_AT) speedDown();
+            if (kind === "expired") {
+                engineState.missRun += 1;
+                if (engineState.missRun >= MISS_RESTART_AT) {
+                    engineState.missRun = 0;
+                    restartFromRight();
+                }
+            } else {
+                engineState.missRun = 0;
+            }
+        }
+
         function step(dtSeconds) {
             for (let i = 0; i < engineState.activeNotes.length; i++) {
                 const n = engineState.activeNotes[i];
@@ -941,6 +987,7 @@ body { display: flex; flex-direction: column; }
                     pushOutcome(false);
                     advanceProgress();
                     emitJudgment({ kind: "expired", note: n, guess: null });
+                    registerOutcome("expired");
                 }
             }
             const FLASH_MS = 200;
@@ -1025,6 +1072,9 @@ body { display: flex; flex-direction: column; }
             engineState.judged = 0;
             engineState.loops = 0;
             engineState.window = [];
+            engineState.correctRun = 0;
+            engineState.errorRun = 0;
+            engineState.missRun = 0;
             engineState.speed = configuredSpeed();
             engineState.timeSinceLastSpawn = 999;
             engineState.lastStatsSig = "";
@@ -1064,12 +1114,14 @@ body { display: flex; flex-direction: column; }
                 pushOutcome(true);
                 advanceProgress();
                 emitJudgment({ kind: "hit", note: target, guess: guess });
+                registerOutcome("hit");
             } else {
                 target.state = "judged-miss";
                 engineState.streak = 0;
                 pushOutcome(false);
                 advanceProgress();
                 emitJudgment({ kind: "miss", note: target, guess: guess });
+                registerOutcome("guess-miss");
             }
             engineState.staff.render({ notes: engineState.activeNotes });
             emitStats();
@@ -1250,7 +1302,7 @@ body { display: flex; flex-direction: column; }
         }
 
         // Streak bar fills toward a "hot streak" goal, then pulses once maxed.
-        const STREAK_GOAL = 10;
+        const STREAK_GOAL = 8;
         function setStreakBar(streak) {
             const s = Math.max(0, streak || 0);
             const fill = document.getElementById("streak-fill");

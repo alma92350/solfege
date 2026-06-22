@@ -949,17 +949,21 @@ body { display: flex; flex-direction: column; }
         const TIER_CAP = 4;
         const MIN_NOTE_GAP_PX = 150;
         const HIGH_SCORE_KEY = "chords.highScore";
-        // Progression is mastery-gated, not accuracy-gated. The scroll speed only
-        // rises once EVERY chord in the current study set is fully mastered.
+        // Tier (which chords appear) stays mastery-gated. Speed is separate: it
+        // moves linearly, never accelerating — see registerOutcome below.
         const LEVEL_ALPHA = 0.25;     // per-level EMA learning rate
         const LEVEL_MASTERED = 0.85;  // per-chord mastery that counts as "100%"
-        const SPEED_STEP = 1.12;      // speed multiplier per mastery milestone
+        const ADVANCE_AFTER = 8;      // correct-in-a-row needed to step the speed up
+        const SPEED_STEP = 10;        // px/s added/removed per step (linear, constant)
+        const ERROR_DROP_AT = 2;      // consecutive errors that trigger a slow-down
+        const MISS_RESTART_AT = 2;    // consecutive missed chords that reset the board
 
         const engineState = {
             staff: null, chordsMod: null, settings: null,
             running: false, rafId: 0, lastFrameMs: 0,
             nextId: 1, activeNotes: [], lastSpawned: null,
             speed: BASE_SPEED, tier: 1,
+            correctRun: 0, errorRun: 0, missRun: 0,
             score: 0, streak: 0, highScore: 0, totalJudged: 0, totalHits: 0,
             window: [],
             levelMastery: {},
@@ -1054,19 +1058,55 @@ body { display: flex; flex-direction: column; }
             return true;
         }
 
-        // Mastery-gated progression: never speeds up on raw accuracy. The player
-        // must first learn EVERY chord in the current scope to full mastery; only
-        // then do we advance — introducing new chords (tier) until the whole scope
-        // is covered, and only after that increasing the scroll speed.
-        function maybeAdvance() {
+        // Tier progression stays mastery-gated: harder chords are only introduced
+        // once the current scope is fully learned. Speed is handled separately.
+        function maybeAdvanceTier() {
             if (!levelAllMastered()) return;
-            if (engineState.tier < TIER_CAP) {
-                engineState.tier += 1;                                  // introduce new chords
-            } else {
-                engineState.speed = clampSpeed(engineState.speed * SPEED_STEP); // then go faster
-            }
+            if (engineState.tier < TIER_CAP) engineState.tier += 1;    // introduce new chords
             engineState.levelMastery = {};                             // re-prove at the new level
             engineState.window = [];
+        }
+
+        function speedUp() { engineState.speed = clampSpeed(engineState.speed + SPEED_STEP); }
+        function speedDown() { engineState.speed = clampSpeed(engineState.speed - SPEED_STEP); }
+
+        // Clear the board so chords respawn from the right at the current (lower) speed.
+        function restartFromRight() {
+            engineState.activeNotes = [];
+            engineState.lastSpawned = null;
+            engineState.timeSinceLastSpawn = 999;
+        }
+
+        // Linear, never-accelerating speed response to each judged chord:
+        //  - every ADVANCE_AFTER correct in a row steps the speed up once;
+        //  - a single error resets the correct counter;
+        //  - ERROR_DROP_AT errors in a row drop the speed, and keep dropping it
+        //    on each further error until the player gets one right;
+        //  - MISS_RESTART_AT missed chords in a row also reset the board.
+        function registerOutcome(kind) {
+            if (kind === "hit") {
+                engineState.errorRun = 0;
+                engineState.missRun = 0;
+                engineState.correctRun += 1;
+                if (engineState.correctRun >= ADVANCE_AFTER) {
+                    engineState.correctRun = 0;
+                    speedUp();
+                }
+                return;
+            }
+            // error: a wrong guess ("guess-miss") or a missed/expired chord
+            engineState.correctRun = 0;
+            engineState.errorRun += 1;
+            if (engineState.errorRun >= ERROR_DROP_AT) speedDown();
+            if (kind === "expired") {
+                engineState.missRun += 1;
+                if (engineState.missRun >= MISS_RESTART_AT) {
+                    engineState.missRun = 0;
+                    restartFromRight();
+                }
+            } else {
+                engineState.missRun = 0;
+            }
         }
 
         function spawnCooldownSeconds() {
@@ -1126,7 +1166,8 @@ body { display: flex; flex-direction: column; }
                     pushOutcome(false);
                     recordMastery(n, false);
                     emitJudgment({ kind: "expired", chord: n, guess: null });
-                    maybeAdvance();
+                    registerOutcome("expired");
+                    maybeAdvanceTier();
                 }
             }
             const FLASH_MS = 200;
@@ -1190,6 +1231,9 @@ body { display: flex; flex-direction: column; }
             engineState.totalHits = 0;
             engineState.window = [];
             engineState.levelMastery = {};
+            engineState.correctRun = 0;
+            engineState.errorRun = 0;
+            engineState.missRun = 0;
             engineState.speed = configuredSpeed();
             engineState.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP,
                 (engineState.settings && engineState.settings.startTier) || 1));
@@ -1226,14 +1270,16 @@ body { display: flex; flex-direction: column; }
                 pushOutcome(true);
                 recordMastery(target, true);
                 emitJudgment({ kind: "hit", chord: target, guess: guess });
+                registerOutcome("hit");
             } else {
                 target.state = "judged-miss";
                 engineState.streak = 0;
                 pushOutcome(false);
                 recordMastery(target, false);
                 emitJudgment({ kind: "miss", chord: target, guess: guess });
+                registerOutcome("guess-miss");
             }
-            maybeAdvance();
+            maybeAdvanceTier();
             engineState.staff.render({ notes: engineState.activeNotes });
             emitStats();
         }
@@ -1462,7 +1508,7 @@ body { display: flex; flex-direction: column; }
         }
 
         // Streak bar fills toward a "hot streak" goal, then pulses once maxed.
-        const STREAK_GOAL = 10;
+        const STREAK_GOAL = 8;
         function setStreakBar(streak) {
             const s = Math.max(0, streak || 0);
             const fill = document.getElementById("streak-fill");
