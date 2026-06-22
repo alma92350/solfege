@@ -233,6 +233,8 @@ body { display: flex; flex-direction: column; }
 .settings-panel input[type="range"] { width: 100%; accent-color: var(--accent); }
 .settings-panel output { display: inline-block; color: var(--accent-hot); font-weight: 600; margin-left: 8px; }
 .study-hint { font-size: 0.82rem; color: var(--fg-muted); margin: 0 0 8px; }
+.settings-panel .field-check { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.settings-panel .field-check input { width: auto; }
 #btn-reset-highscore { background: #3a1a1a; border-color: #5a2a2a; }
 #btn-reset-highscore:hover { border-color: var(--bad); }
 
@@ -387,6 +389,15 @@ body { display: flex; flex-direction: column; }
             <label><input type="radio" name="answer-layout" value="buttons" checked> Buttons</label>
             <label><input type="radio" name="answer-layout" value="piano"> Piano Keyboard</label>
         </fieldset>
+        <fieldset>
+            <legend>Speed</legend>
+            <label class="field-check"><input type="checkbox" id="auto-speed" checked> Adapt speed automatically</label>
+            <label>Flash time per note
+                <input type="range" id="flash-speed" min="260" max="1000" step="20" value="850">
+                <output id="flash-speed-output">850</output> ms
+            </label>
+            <p class="study-hint">Off: cards flash for the time you set (lower = faster).</p>
+        </fieldset>
         <fieldset id="note-study">
             <legend>Note Study Set</legend>
             <p class="study-hint">Which notes can appear. Under-practised ones show up more often.</p>
@@ -464,7 +475,7 @@ body { display: flex; flex-direction: column; }
         const KEY = "flash.settings.v1";
         const DEFAULTS = Object.freeze({
             element: "notes", length: 3, clef: "treble", startTier: 1,
-            display: "sequence", answerLayout: "buttons",
+            display: "sequence", answerLayout: "buttons", autoSpeed: true, flashSpeed: 850,
             noteNames: SOLFEGE_ORDER.slice(),
             chordQualities: ["maj", "min", "dim"], chordInversions: [0],
         });
@@ -480,6 +491,9 @@ body { display: flex; flex-direction: column; }
                 if (raw.clef === "treble" || raw.clef === "bass") out.clef = raw.clef;
                 if (raw.display === "sequence" || raw.display === "together") out.display = raw.display;
                 if (raw.answerLayout === "buttons" || raw.answerLayout === "piano") out.answerLayout = raw.answerLayout;
+                if (typeof raw.autoSpeed === "boolean") out.autoSpeed = raw.autoSpeed;
+                const fs = parseInt(raw.flashSpeed, 10);
+                if (Number.isFinite(fs)) out.flashSpeed = Math.min(1000, Math.max(260, fs));
                 const t = parseInt(raw.startTier, 10);
                 if (Number.isFinite(t)) out.startTier = Math.min(4, Math.max(1, t));
                 if (Array.isArray(raw.noteNames)) {
@@ -867,6 +881,14 @@ body { display: flex; flex-direction: column; }
         // Slowest flash duration depends on the display mode: a touch longer when the
         // whole card is shown together, since there's more to take in at once.
         function flashBase() { return allAtOnce() ? FLASH_START_ALL : FLASH_START_SEQ; }
+        // With adaptive speed off, the player picks a fixed flash time instead.
+        function autoSpeedOn() { return !st.settings || st.settings.autoSpeed !== false; }
+        function manualFlash() {
+            const v = st.settings && parseInt(st.settings.flashSpeed, 10);
+            return Number.isFinite(v) ? v : flashBase();
+        }
+        // Where the flash duration starts: adaptive base, or the player's fixed value.
+        function effectiveFlashStart() { return autoSpeedOn() ? flashBase() : clampFlash(manualFlash()); }
         function rollingAccuracy() {
             if (!st.window.length) return 1.0;
             let s = 0; for (let i = 0; i < st.window.length; i++) s += st.window[i];
@@ -923,6 +945,7 @@ body { display: flex; flex-direction: column; }
         //  - a single miss resets that count;
         //  - ERROR_DROP_AT misses in a row flash slower, easing off until recovery.
         function registerOutcome(hit) {
+            if (!autoSpeedOn()) return;   // player set the flash time manually
             if (hit) {
                 st.errorRun = 0;
                 st.correctRun += 1;
@@ -1045,7 +1068,7 @@ body { display: flex; flex-direction: column; }
         function init(opts) {
             st.settings = opts.settings;
             st.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP, st.settings.startTier || 1));
-            st.flashMs = flashBase();
+            st.flashMs = effectiveFlashStart();
             mastery.load();
             st.highScore = loadHigh();
             emitStats();
@@ -1071,7 +1094,7 @@ body { display: flex; flex-direction: column; }
             st.levelMastery = {};
             st.correctRun = 0; st.errorRun = 0;
             st.tier = Math.max(TIER_FLOOR, Math.min(TIER_CAP, (st.settings && st.settings.startTier) || 1));
-            st.flashMs = flashBase();
+            st.flashMs = effectiveFlashStart();
             st.lastStatsSig = "";
             staff.clear();
             emitStats();
@@ -1090,6 +1113,10 @@ body { display: flex; flex-direction: column; }
                 JSON.stringify(ns.chordInversions) !== JSON.stringify(prev.chordInversions);
             if (ns.clef !== prev.clef) staff.setClef(ns.clef);
             if (scopeChanged) { st.levelMastery = {}; st.lastStatsSig = ""; }
+            // Manual flash time (or toggling adaptation) takes effect right away.
+            if (!autoSpeedOn()) st.flashMs = clampFlash(manualFlash());
+            else if (ns.autoSpeed !== prev.autoSpeed) st.flashMs = flashBase();
+            st.lastStatsSig = "";
         }
         function getStats() {
             return {
@@ -1317,6 +1344,14 @@ body { display: flex; flex-direction: column; }
             document.querySelectorAll('input[name="clef"]').forEach(r => { r.checked = r.value === s.clef; });
             document.querySelectorAll('input[name="display"]').forEach(r => { r.checked = r.value === s.display; });
             document.querySelectorAll('input[name="answer-layout"]').forEach(r => { r.checked = r.value === (s.answerLayout || "buttons"); });
+            const autoSp = $("#auto-speed");
+            if (autoSp) autoSp.checked = s.autoSpeed !== false;
+            const flashSp = $("#flash-speed"), flashOut = $("#flash-speed-output");
+            if (flashSp) {
+                flashSp.value = String(s.flashSpeed || 850);
+                flashSp.disabled = s.autoSpeed !== false;
+                if (flashOut) flashOut.textContent = String(s.flashSpeed || 850);
+            }
             const len = $("#length"), lenOut = $("#length-output");
             if (len) { len.value = String(s.length); if (lenOut) lenOut.textContent = String(s.length); }
             const tier = $("#start-tier"), tierOut = $("#start-tier-output");
@@ -1432,6 +1467,30 @@ body { display: flex; flex-direction: column; }
             document.querySelectorAll('input[name="display"]').forEach(r => on(r, "change", () => { if (r.checked) { settings.update({ display: r.value }); reconfigure(); } }));
             // Layout only swaps the visible input — no need to reset the game.
             document.querySelectorAll('input[name="answer-layout"]').forEach(r => on(r, "change", () => { if (r.checked) { settings.update({ answerLayout: r.value }); setMode(settings.get().element); } }));
+
+            // Adaptive-speed toggle + manual flash-time slider (no game reset).
+            const autoSpeed = $("#auto-speed");
+            const flashSpeed = $("#flash-speed"), flashOut = $("#flash-speed-output");
+            function syncFlashControl() {
+                const on_ = !autoSpeed || autoSpeed.checked;
+                if (flashSpeed) flashSpeed.disabled = on_;
+            }
+            if (autoSpeed) {
+                on(autoSpeed, "change", () => {
+                    const saved = settings.update({ autoSpeed: autoSpeed.checked });
+                    engine.applySettings(saved);
+                    syncFlashControl();
+                });
+            }
+            if (flashSpeed) {
+                on(flashSpeed, "input", () => { if (flashOut) flashOut.textContent = flashSpeed.value; });
+                on(flashSpeed, "change", () => {
+                    const saved = settings.update({ flashSpeed: parseInt(flashSpeed.value, 10) });
+                    flashSpeed.value = String(saved.flashSpeed);
+                    if (flashOut) flashOut.textContent = String(saved.flashSpeed);
+                    engine.applySettings(saved);
+                });
+            }
 
             const len = $("#length"), lenOut = $("#length-output");
             if (len) {

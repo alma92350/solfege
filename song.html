@@ -170,6 +170,9 @@ body { display: flex; flex-direction: column; }
 }
 .settings-panel input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .settings-panel .field-row { display: flex; align-items: center; justify-content: space-between; }
+.settings-panel .field-check { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.settings-panel .field-check input { width: auto; }
+.settings-panel .study-hint { color: var(--fg-muted); font-size: 0.8rem; margin: 8px 0 0; }
 .settings-panel .field-unit { color: var(--fg-muted); font-size: 0.8rem; margin-left: 8px; }
 .settings-panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .settings-panel button:disabled { opacity: 0.5; cursor: default; }
@@ -416,6 +419,8 @@ body { display: flex; flex-direction: column; }
             <label class="field-row">Scroll speed
                 <span><input type="number" id="speed-input" min="40" max="250" step="5" value="60"><span class="field-unit">px/s</span></span>
             </label>
+            <label class="field-check"><input type="checkbox" id="auto-speed" checked> Adapt speed automatically</label>
+            <p class="study-hint">Off: the scroll stays at the speed you set above.</p>
         </fieldset>
         <fieldset>
             <legend>Game</legend>
@@ -452,7 +457,7 @@ body { display: flex; flex-direction: column; }
     const settings = (function () {
         const SETTINGS_KEY = "solfege.settings.v1";
         const DEFAULTS = Object.freeze({
-            clef: "treble", answerLayout: "buttons", notation: "solfege", speed: 60,
+            clef: "treble", answerLayout: "buttons", notation: "solfege", speed: 60, autoSpeed: true,
             song: "vapor-trail", showLyrics: false,
         });
         let current = null;
@@ -471,6 +476,7 @@ body { display: flex; flex-direction: column; }
                 }
                 const sp = parseInt(raw.speed, 10);
                 if (Number.isFinite(sp)) out.speed = Math.min(250, Math.max(40, sp));
+                if (typeof raw.autoSpeed === "boolean") out.autoSpeed = raw.autoSpeed;
                 if (typeof raw.song === "string" && raw.song) out.song = raw.song;
                 out.showLyrics = !!raw.showLyrics;
             }
@@ -931,6 +937,9 @@ body { display: flex; flex-direction: column; }
             }
         }
 
+        // When the player turns off adaptive speed, the scroll stays put at the
+        // speed they set (the song melody itself is unchanged).
+        function autoSpeedOn() { return !engineState.settings || engineState.settings.autoSpeed !== false; }
         function speedUp() { engineState.speed = clampSpeed(engineState.speed + SPEED_STEP); }
         function speedDown() { engineState.speed = clampSpeed(engineState.speed - SPEED_STEP); }
 
@@ -947,11 +956,12 @@ body { display: flex; flex-direction: column; }
         //    on each further error until the player gets one right;
         //  - MISS_RESTART_AT missed notes in a row also reset the board.
         function registerOutcome(kind) {
+            const auto = autoSpeedOn();
             if (kind === "hit") {
                 engineState.errorRun = 0;
                 engineState.missRun = 0;
                 engineState.correctRun += 1;
-                if (engineState.correctRun >= ADVANCE_AFTER) {
+                if (auto && engineState.correctRun >= ADVANCE_AFTER) {
                     engineState.correctRun = 0;
                     speedUp();
                 }
@@ -959,10 +969,10 @@ body { display: flex; flex-direction: column; }
             }
             engineState.correctRun = 0;
             engineState.errorRun += 1;
-            if (engineState.errorRun >= ERROR_DROP_AT) speedDown();
+            if (auto && engineState.errorRun >= ERROR_DROP_AT) speedDown();
             if (kind === "expired") {
                 engineState.missRun += 1;
-                if (engineState.missRun >= MISS_RESTART_AT) {
+                if (auto && engineState.missRun >= MISS_RESTART_AT) {
                     engineState.missRun = 0;
                     restartFromRight();
                 }
@@ -1452,6 +1462,15 @@ body { display: flex; flex-direction: column; }
                 });
             }
 
+            const autoSpeed = $("#auto-speed");
+            if (autoSpeed) {
+                on(autoSpeed, "change", () => {
+                    const saved = settings.update({ autoSpeed: autoSpeed.checked });
+                    if (typeof engine.applySettings === "function") engine.applySettings(saved);
+                    if (!saved.autoSpeed && typeof engine.setSpeed === "function") engine.setSpeed(saved.speed);
+                });
+            }
+
             on($("#btn-start"), "click", () => { engine.start(); setOverlay(true); });
             on($("#btn-pause"), "click", () => { engine.pause(); setOverlay(false); });
             on($("#btn-reset"), "click", () => { engine.reset(); });
@@ -1471,6 +1490,7 @@ body { display: flex; flex-direction: column; }
             const cur = settings.get ? settings.get() : null;
             if (cur) {
                 if (speedInput && cur.speed) speedInput.value = String(cur.speed);
+                if (autoSpeed) autoSpeed.checked = cur.autoSpeed !== false;
                 const layout = cur.answerLayout || "buttons";
                 document.querySelectorAll('input[name="answer-layout"]').forEach((r) => {
                     r.checked = (r.value === layout);

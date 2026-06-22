@@ -156,6 +156,8 @@ body { display: flex; flex-direction: column; }
 }
 .settings-panel input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .settings-panel .field-row { display: flex; align-items: center; justify-content: space-between; }
+.settings-panel .field-check { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.settings-panel .field-check input { width: auto; }
 .settings-panel .field-unit { color: var(--fg-muted); font-size: 0.8rem; margin-left: 8px; }
 .settings-panel .study-hint { color: var(--fg-muted); font-size: 0.8rem; margin: 0 0 10px; }
 .settings-panel .study-group { margin-bottom: 10px; }
@@ -426,6 +428,8 @@ body { display: flex; flex-direction: column; }
             <label class="field-row">Scroll speed
                 <span><input type="number" id="speed-input" min="40" max="250" step="5" value="50"><span class="field-unit">px/s</span></span>
             </label>
+            <label class="field-check"><input type="checkbox" id="auto-speed" checked> Adapt speed automatically</label>
+            <p class="study-hint">Off: the scroll stays at the speed you set above.</p>
         </fieldset>
         <fieldset>
             <legend>Game</legend>
@@ -462,7 +466,7 @@ body { display: flex; flex-direction: column; }
         const SETTINGS_KEY = "solfege.settings.v1";
         const ALL_NAMES = ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"];
         const DEFAULTS = Object.freeze({
-            clef: "treble", startTier: 1, answerLayout: "buttons", notation: "solfege", speed: 50,
+            clef: "treble", startTier: 1, answerLayout: "buttons", notation: "solfege", speed: 50, autoSpeed: true,
             studyNames: ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"], studyAccidentals: false,
         });
         let current = null;
@@ -492,6 +496,7 @@ body { display: flex; flex-direction: column; }
                 }
                 const sp = parseInt(raw.speed, 10);
                 if (Number.isFinite(sp)) out.speed = Math.min(250, Math.max(40, sp));
+                if (typeof raw.autoSpeed === "boolean") out.autoSpeed = raw.autoSpeed;
                 out.studyNames = sanitizeList(raw.studyNames, ALL_NAMES, DEFAULTS.studyNames);
                 out.studyAccidentals = !!raw.studyAccidentals;
             }
@@ -1115,6 +1120,9 @@ body { display: flex; flex-direction: column; }
             engineState.window = [];
         }
 
+        // When the player turns off adaptive speed, the scroll stays put at the
+        // speed they set and only tier/note progression keeps going.
+        function autoSpeedOn() { return !engineState.settings || engineState.settings.autoSpeed !== false; }
         function speedUp() { engineState.speed = clampSpeed(engineState.speed + SPEED_STEP); }
         function speedDown() { engineState.speed = clampSpeed(engineState.speed - SPEED_STEP); }
 
@@ -1132,11 +1140,12 @@ body { display: flex; flex-direction: column; }
         //    on each further error until the player gets one right;
         //  - MISS_RESTART_AT missed notes in a row also reset the board.
         function registerOutcome(kind) {
+            const auto = autoSpeedOn();
             if (kind === "hit") {
                 engineState.errorRun = 0;
                 engineState.missRun = 0;
                 engineState.correctRun += 1;
-                if (engineState.correctRun >= ADVANCE_AFTER) {
+                if (auto && engineState.correctRun >= ADVANCE_AFTER) {
                     engineState.correctRun = 0;
                     speedUp();
                 }
@@ -1145,10 +1154,10 @@ body { display: flex; flex-direction: column; }
             // error: a wrong guess ("guess-miss") or a missed/expired note
             engineState.correctRun = 0;
             engineState.errorRun += 1;
-            if (engineState.errorRun >= ERROR_DROP_AT) speedDown();
+            if (auto && engineState.errorRun >= ERROR_DROP_AT) speedDown();
             if (kind === "expired") {
                 engineState.missRun += 1;
-                if (engineState.missRun >= MISS_RESTART_AT) {
+                if (auto && engineState.missRun >= MISS_RESTART_AT) {
                     engineState.missRun = 0;
                     restartFromRight();
                 }
@@ -1651,6 +1660,16 @@ body { display: flex; flex-direction: column; }
                 });
             }
 
+            const autoSpeed = $("#auto-speed");
+            if (autoSpeed) {
+                on(autoSpeed, "change", () => {
+                    const saved = settings.update({ autoSpeed: autoSpeed.checked });
+                    engine.applySettings(saved);
+                    // Turning adaptation off snaps the scroll to the speed you set.
+                    if (!saved.autoSpeed && typeof engine.setSpeed === "function") engine.setSpeed(saved.speed);
+                });
+            }
+
             // Study-set checkboxes (note names + accidentals).
             const studyAccEl = $("#study-accidentals");
             function readStudyFromUI() {
@@ -1719,6 +1738,7 @@ body { display: flex; flex-direction: column; }
                     if (startTierOut) startTierOut.textContent = String(cur.startTier);
                 }
                 if (speedInput && cur.speed) speedInput.value = String(cur.speed);
+                if (autoSpeed) autoSpeed.checked = cur.autoSpeed !== false;
                 const layout = cur.answerLayout || "buttons";
                 document.querySelectorAll('input[name="answer-layout"]').forEach((r) => {
                     r.checked = (r.value === layout);
