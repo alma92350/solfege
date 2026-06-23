@@ -41,6 +41,27 @@
             ],
         },
         {
+            id: "merry-go-round",
+            key: "F minor",
+            title: "Merry-Go-Round of Life — 人生のメリーゴーランド",
+            composer: "Joe Hisaishi · Howl's Moving Castle",
+            keyName: "F minor",
+            clef: "treble",
+            // The main waltz theme (3/4): it lifts from C up into the F-minor
+            // melody, arches over the high A♭, then drifts back down the scale to
+            // the tonic. Principal melody, in the original key (4 flats).
+            // C5=72 D♭5=73 E♭5=75 F5=77 G5=79 A♭5=80  F4=65 G4=67 A♭4=68 B♭4=70
+            notes: [
+                72, 77, 79,   // C5  F5  G5   — rise into the theme
+                80, 79, 77,   // A♭5 G5  F5   — arch over the peak
+                79, 77, 75,   // G5  F5  E♭5
+                77, 72, 73,   // F5  C5  D♭5
+                72, 70, 68,   // C5  B♭4 A♭4  — the waltz drifts down
+                70, 68, 67,   // B♭4 A♭4 G4
+                68, 67, 65,   // A♭4 G4  F4   — settle on the tonic
+            ],
+        },
+        {
             id: "twinkle",
             key: "C major",
             title: "Twinkle, Twinkle, Little Star",
