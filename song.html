@@ -1107,10 +1107,18 @@ body { display: flex; flex-direction: column; }
             }
             if (!target) return;
 
-            // A piano key answers a specific pitch (octave-aware, matched by midi);
-            // a solfège button/key answers the degree, octave-agnostic as before.
+            // A piano key answers a pitch: octave-aware (exact midi) only when more
+            // than one octave is on screen, otherwise any matching pitch-class
+            // counts. A solfège button answers the degree, octave-agnostic.
             const isPitchGuess = typeof guess === "object" && Number.isFinite(guess.midi);
-            const correct = isPitchGuess ? (target.midi === guess.midi) : (target.solfege === guess);
+            let correct;
+            if (isPitchGuess) {
+                correct = guess.octaveAware
+                    ? (target.midi === guess.midi)
+                    : ((((target.midi % 12) + 12) % 12) === (((guess.midi % 12) + 12) % 12));
+            } else {
+                correct = target.solfege === guess;
+            }
 
             if (correct) {
                 target.state = "judged-hit";
@@ -1455,7 +1463,7 @@ body { display: flex; flex-direction: column; }
                 if (!Number.isFinite(midi)) return;
                 key.classList.add("pressed");
                 setTimeout(() => key.classList.remove("pressed"), 110);
-                engine.submitGuess({ midi: midi });
+                engine.submitGuess({ midi: midi, octaveAware: pianoIsOctaveAware() });
             });
 
             // Answer-layout radios
@@ -1621,14 +1629,35 @@ body { display: flex; flex-direction: column; }
             writeHud("hud-highscore", "highScore", stats.highScore != null ? stats.highScore : 0);
         }
 
-        function flashKeyByMidi(midi, kind) {
+        // The octave only matters when more than one octave is on screen.
+        function pianoIsOctaveAware() {
+            let lo = Infinity, hi = -Infinity;
+            document.querySelectorAll(".piano-key[data-midi]").forEach((k) => {
+                const m = parseInt(k.dataset.midi, 10);
+                if (Number.isFinite(m)) { if (m < lo) lo = m; if (m > hi) hi = m; }
+            });
+            return hi - lo > 12;
+        }
+        function flashKeys(els, kind) {
             const cls = kind === "hit" ? "flash-good" : "flash-bad";
-            document.querySelectorAll('.piano-key[data-midi="' + midi + '"]').forEach((el) => {
+            els.forEach((el) => {
                 el.classList.remove("flash-good", "flash-bad");
                 void el.offsetWidth;
                 el.classList.add(cls);
                 setTimeout(() => el.classList.remove(cls), 280);
             });
+        }
+        function flashKeyByMidi(midi, kind) {
+            flashKeys(document.querySelectorAll('.piano-key[data-midi="' + midi + '"]'), kind);
+        }
+        function flashKeyByPc(pc, kind) {
+            const want = ((pc % 12) + 12) % 12;
+            const match = [];
+            document.querySelectorAll(".piano-key[data-midi]").forEach((el) => {
+                const m = parseInt(el.dataset.midi, 10);
+                if (Number.isFinite(m) && (((m % 12) + 12) % 12) === want) match.push(el);
+            });
+            flashKeys(match, kind);
         }
         function flashFeedback(ev) {
             if (!ev || !ev.note) return;
@@ -1639,15 +1668,20 @@ body { display: flex; flex-direction: column; }
                 else flashButton(ev.note.solfege, "hit");
             } else if (ev.kind === "miss") {
                 if (pitchGuess) {
-                    flashKeyByMidi(ev.note.midi, "miss");
+                    if (g.octaveAware) flashKeyByMidi(ev.note.midi, "miss");
+                    else flashKeyByPc(ev.note.midi, "miss");
                     if (g.midi !== ev.note.midi) flashKeyByMidi(g.midi, "miss");
                 } else {
                     flashButton(ev.note.solfege, "miss");
                     if (g) flashButton(g, "miss");
                 }
             } else if (ev.kind === "expired") {
-                if (uiState.answerLayout === "piano") flashKeyByMidi(ev.note.midi, "miss");
-                else flashButton(ev.note.solfege, "miss");
+                if (uiState.answerLayout === "piano") {
+                    if (pianoIsOctaveAware()) flashKeyByMidi(ev.note.midi, "miss");
+                    else flashKeyByPc(ev.note.midi, "miss");
+                } else {
+                    flashButton(ev.note.solfege, "miss");
+                }
             }
         }
 
