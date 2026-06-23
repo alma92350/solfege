@@ -402,6 +402,11 @@ body { display: flex; flex-direction: column; }
             <p class="study-hint">Off: the scroll stays at the speed you set above.</p>
         </fieldset>
         <fieldset>
+            <legend>Sound</legend>
+            <label class="field-check"><input type="checkbox" id="sound-toggle" checked> Play chord sounds</label>
+            <p class="study-hint">Hear the chord when you answer (and a buzz on a miss).</p>
+        </fieldset>
+        <fieldset>
             <legend>Game</legend>
             <button id="btn-start" type="button">Start</button>
             <button id="btn-pause" type="button">Pause</button>
@@ -418,6 +423,7 @@ body { display: flex; flex-direction: column; }
     </aside>
 
     <script src="shared/music.js"></script>
+    <script src="shared/audio.js"></script>
     <script>
 /*
  * Chord Trainer - standalone single-file build, sibling to the Solfege Trainer.
@@ -436,7 +442,7 @@ body { display: flex; flex-direction: column; }
         const ALL_QUALITIES = ["maj", "min", "dim", "aug"];
         const DEFAULTS = Object.freeze({
             clef: "treble", startTier: 1, notation: "solfege", speed: 50, answerLayout: "buttons", autoSpeed: true,
-            showKeyNames: false,
+            showKeyNames: false, sound: true,
             studyQualities: ["maj", "min", "dim"], studyInversions: [0],
         });
         let current = null;
@@ -464,6 +470,7 @@ body { display: flex; flex-direction: column; }
                 const sp = parseInt(raw.speed, 10);
                 if (Number.isFinite(sp)) out.speed = Math.min(250, Math.max(40, sp));
                 if (typeof raw.autoSpeed === "boolean") out.autoSpeed = raw.autoSpeed;
+                if (typeof raw.sound === "boolean") out.sound = raw.sound;
                 out.studyQualities = sanitizeList(raw.studyQualities, ALL_QUALITIES, DEFAULTS.studyQualities);
                 const invRaw = Array.isArray(raw.studyInversions)
                     ? raw.studyInversions.map((n) => parseInt(n, 10)) : null;
@@ -1370,6 +1377,8 @@ body { display: flex; flex-direction: column; }
     // ui module (HUD, root/quality buttons, settings panel, pause overlay)
     // ========================================================================
     const ui = (function () {
+        const audio = (typeof window !== "undefined" && window.Solfege && window.Solfege.audio)
+            || { playNote() {}, playChord() {}, playError() {}, setEnabled() {}, unlock() {} };
         const ROOT_KEY_MAP = {
             "1": "DO", "2": "RE", "3": "MI", "4": "FA", "5": "SOL", "6": "LA", "7": "SI",
         };
@@ -1572,6 +1581,14 @@ body { display: flex; flex-direction: column; }
                     if (kb) kb.classList.toggle("show-names", showNames.checked);
                 });
             }
+            const soundToggle = $("#sound-toggle");
+            if (soundToggle) {
+                on(soundToggle, "change", () => {
+                    settings.update({ sound: soundToggle.checked });
+                    audio.setEnabled(soundToggle.checked);
+                    if (soundToggle.checked) audio.unlock();
+                });
+            }
 
             document.querySelectorAll('input[name="notation"]').forEach((radio) => {
                 on(radio, "change", () => {
@@ -1699,7 +1716,7 @@ body { display: flex; flex-direction: column; }
                 commitStudy();
             });
 
-            on($("#btn-start"), "click", () => { engine.start(); setOverlay(true); });
+            on($("#btn-start"), "click", () => { audio.unlock(); engine.start(); setOverlay(true); });
             on($("#btn-pause"), "click", () => { engine.pause(); setOverlay(false); });
             on($("#btn-reset"), "click", () => { engine.reset(); clearSelection(); });
 
@@ -1736,6 +1753,9 @@ body { display: flex; flex-direction: column; }
                 if (speedInput && cur.speed) speedInput.value = String(cur.speed);
                 if (autoSpeed) autoSpeed.checked = cur.autoSpeed !== false;
                 if (showNames) showNames.checked = !!cur.showKeyNames;
+                const soundOn = cur.sound !== false;
+                if (soundToggle) soundToggle.checked = soundOn;
+                audio.setEnabled(soundOn);
                 const kbEl = document.getElementById("piano-keyboard");
                 if (kbEl) kbEl.classList.toggle("show-names", !!cur.showKeyNames);
                 const notation = cur.notation || "solfege";
@@ -1787,9 +1807,12 @@ body { display: flex; flex-direction: column; }
         function flashFeedback(ev) {
             if (!ev || !ev.chord) return;
             if (ev.kind === "hit") {
+                audio.playChord(ev.chord.notes);
                 flashAttr("data-root", ev.chord.root, "hit");
                 flashAttr("data-quality", ev.chord.quality, "hit");
             } else if (ev.kind === "miss") {
+                audio.playError();
+                audio.playChord(ev.chord.notes, { delay: 0.22, gain: 0.45 });   // then hear the right chord
                 // Teach: show the correct answer green, the wrong guess red.
                 flashAttr("data-root", ev.chord.root, "hit");
                 flashAttr("data-quality", ev.chord.quality, "hit");
@@ -1798,6 +1821,8 @@ body { display: flex; flex-direction: column; }
                     if (ev.guess.quality !== ev.chord.quality) flashAttr("data-quality", ev.guess.quality, "miss");
                 }
             } else if (ev.kind === "expired") {
+                audio.playError();
+                audio.playChord(ev.chord.notes, { delay: 0.22, gain: 0.4 });
                 flashAttr("data-root", ev.chord.root, "miss");
                 flashAttr("data-quality", ev.chord.quality, "miss");
             }

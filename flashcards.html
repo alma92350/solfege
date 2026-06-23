@@ -437,6 +437,11 @@ body { display: flex; flex-direction: column; }
             <output id="start-tier-output">1</output>
         </fieldset>
         <fieldset>
+            <legend>Sound</legend>
+            <label class="field-check"><input type="checkbox" id="sound-toggle" checked> Play note sounds</label>
+            <p class="study-hint">Hear the pitch(es) when you answer (and a buzz on a miss).</p>
+        </fieldset>
+        <fieldset>
             <legend>Game</legend>
             <button id="btn-start" type="button">Start</button>
             <button id="btn-pause" type="button">Pause</button>
@@ -453,6 +458,7 @@ body { display: flex; flex-direction: column; }
     </aside>
 
     <script src="shared/music.js"></script>
+    <script src="shared/audio.js"></script>
     <script>
 /*
  * Flashcard Trainer — memorize a short sequence of notes or chords.
@@ -469,6 +475,8 @@ body { display: flex; flex-direction: column; }
     "use strict";
     const music = (typeof window !== "undefined" && window.Solfege && window.Solfege.music) || null;
     if (!music) throw new Error("shared/music.js must load before this script");
+    const audio = (typeof window !== "undefined" && window.Solfege && window.Solfege.audio)
+        || { playNote() {}, playChord() {}, playError() {}, setEnabled() {}, unlock() {} };
 
     const SOLFEGE_ORDER = music.SOLFEGE_ORDER;
     const QUALITY_LABEL = { maj: "", min: "m", dim: "°", aug: "+" };
@@ -481,7 +489,7 @@ body { display: flex; flex-direction: column; }
         const DEFAULTS = Object.freeze({
             element: "notes", length: 3, clef: "treble", startTier: 1,
             display: "sequence", answerLayout: "buttons", autoSpeed: true, flashSpeed: 850,
-            showKeyNames: false,
+            showKeyNames: false, sound: true,
             noteNames: SOLFEGE_ORDER.slice(),
             chordQualities: ["maj", "min", "dim"], chordInversions: [0],
         });
@@ -499,6 +507,7 @@ body { display: flex; flex-direction: column; }
                 if (raw.answerLayout === "buttons" || raw.answerLayout === "piano") out.answerLayout = raw.answerLayout;
                 if (typeof raw.showKeyNames === "boolean") out.showKeyNames = raw.showKeyNames;
                 if (typeof raw.autoSpeed === "boolean") out.autoSpeed = raw.autoSpeed;
+                if (typeof raw.sound === "boolean") out.sound = raw.sound;
                 const fs = parseInt(raw.flashSpeed, 10);
                 if (Number.isFinite(fs)) out.flashSpeed = Math.min(1000, Math.max(260, fs));
                 const t = parseInt(raw.startTier, 10);
@@ -1027,6 +1036,12 @@ body { display: flex; flex-direction: column; }
             if (idx >= st.card.length) return;
             const expected = st.card[idx];
             const correct = answersMatch(answer, expected.answer);
+            if (correct) {
+                audio.playChord(expected.notes);                       // hear the pitch(es) you nailed
+            } else {
+                audio.playError();
+                audio.playChord(expected.notes, { delay: 0.2, gain: 0.45 });   // then the right answer
+            }
             mastery.recordOutcome(clefOf(), expected.key, correct);
             levelBump(expected.key, correct);
             registerOutcome(correct);
@@ -1357,6 +1372,10 @@ body { display: flex; flex-direction: column; }
             if (kbEl) kbEl.classList.toggle("show-names", !!s.showKeyNames);
             const autoSp = $("#auto-speed");
             if (autoSp) autoSp.checked = s.autoSpeed !== false;
+            const soundT = $("#sound-toggle");
+            const soundOn = s.sound !== false;
+            if (soundT) soundT.checked = soundOn;
+            audio.setEnabled(soundOn);
             const flashSp = $("#flash-speed"), flashOut = $("#flash-speed-output");
             if (flashSp) {
                 flashSp.value = String(s.flashSpeed || 850);
@@ -1484,6 +1503,12 @@ body { display: flex; flex-direction: column; }
                 const kb = document.getElementById("piano-keyboard");
                 if (kb) kb.classList.toggle("show-names", showKeyNames.checked);
             });
+            const soundToggle = $("#sound-toggle");
+            if (soundToggle) on(soundToggle, "change", () => {
+                settings.update({ sound: soundToggle.checked });
+                audio.setEnabled(soundToggle.checked);
+                if (soundToggle.checked) audio.unlock();
+            });
 
             // Adaptive-speed toggle + manual flash-time slider (no game reset).
             const autoSpeed = $("#auto-speed");
@@ -1523,7 +1548,7 @@ body { display: flex; flex-direction: column; }
             document.querySelectorAll('#chord-study input[data-quality]').forEach(c => on(c, "change", () => { settings.update({ chordQualities: collectQualities() }); reconfigure(); }));
             document.querySelectorAll('#chord-study input[data-inversion]').forEach(c => on(c, "change", () => { settings.update({ chordInversions: collectInversions() }); reconfigure(); }));
 
-            on($("#btn-start"), "click", () => { engine.start(); setOverlay(true); });
+            on($("#btn-start"), "click", () => { audio.unlock(); engine.start(); setOverlay(true); });
             on($("#btn-pause"), "click", () => { engine.pause(); setOverlay(false); });
             on($("#btn-reset"), "click", () => { engine.reset(); });
             on($("#btn-reset-highscore"), "click", () => { if (confirm("Reset high score?")) engine.resetHighScore(); });

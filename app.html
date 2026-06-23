@@ -433,6 +433,11 @@ body { display: flex; flex-direction: column; }
             <p class="study-hint">Off: the scroll stays at the speed you set above.</p>
         </fieldset>
         <fieldset>
+            <legend>Sound</legend>
+            <label class="field-check"><input type="checkbox" id="sound-toggle" checked> Play note sounds</label>
+            <p class="study-hint">Hear each note's pitch when you answer (and a buzz on a miss).</p>
+        </fieldset>
+        <fieldset>
             <legend>Game</legend>
             <button id="btn-start" type="button">Start</button>
             <button id="btn-pause" type="button">Pause</button>
@@ -449,6 +454,7 @@ body { display: flex; flex-direction: column; }
     </aside>
 
     <script src="shared/music.js"></script>
+    <script src="shared/audio.js"></script>
     <script>
 /*
  * Solfege Trainer - standalone single-file build.
@@ -468,7 +474,7 @@ body { display: flex; flex-direction: column; }
         const ALL_NAMES = ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"];
         const DEFAULTS = Object.freeze({
             clef: "treble", startTier: 1, answerLayout: "buttons", notation: "solfege", speed: 50, autoSpeed: true,
-            keyboardRange: "octave", showKeyNames: false,
+            keyboardRange: "octave", showKeyNames: false, sound: true,
             studyNames: ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"], studyAccidentals: false,
         });
         let current = null;
@@ -501,6 +507,7 @@ body { display: flex; flex-direction: column; }
                 if (typeof raw.autoSpeed === "boolean") out.autoSpeed = raw.autoSpeed;
                 if (raw.keyboardRange === "octave" || raw.keyboardRange === "extended") out.keyboardRange = raw.keyboardRange;
                 if (typeof raw.showKeyNames === "boolean") out.showKeyNames = raw.showKeyNames;
+                if (typeof raw.sound === "boolean") out.sound = raw.sound;
                 out.studyNames = sanitizeList(raw.studyNames, ALL_NAMES, DEFAULTS.studyNames);
                 out.studyAccidentals = !!raw.studyAccidentals;
             }
@@ -1460,6 +1467,8 @@ body { display: flex; flex-direction: column; }
     // ui module (HUD, buttons, settings panel, pause overlay)
     // ========================================================================
     const ui = (function () {
+        const audio = (typeof window !== "undefined" && window.Solfege && window.Solfege.audio)
+            || { playNote() {}, playChord() {}, playError() {}, setEnabled() {}, unlock() {} };
         const KEY_MAP = {
             "1": "DO", "2": "RE", "3": "MI", "4": "FA", "5": "SOL", "6": "LA", "7": "SI",
             "d": "DO", "r": "RE", "m": "MI", "f": "FA", "g": "SOL", "l": "LA", "t": "SI",
@@ -1803,6 +1812,14 @@ body { display: flex; flex-direction: column; }
                     rebuildPiano();
                 });
             }
+            const soundToggle = $("#sound-toggle");
+            if (soundToggle) {
+                on(soundToggle, "change", () => {
+                    settings.update({ sound: soundToggle.checked });
+                    audio.setEnabled(soundToggle.checked);
+                    if (soundToggle.checked) audio.unlock();
+                });
+            }
 
             const startTier = $("#start-tier");
             const startTierOut = $("#start-tier-output");
@@ -1863,7 +1880,7 @@ body { display: flex; flex-direction: column; }
                 commitStudy();
             });
 
-            on($("#btn-start"), "click", () => { engine.start(); setOverlay(true); });
+            on($("#btn-start"), "click", () => { audio.unlock(); engine.start(); setOverlay(true); });
             on($("#btn-pause"), "click", () => { engine.pause(); setOverlay(false); });
             on($("#btn-reset"), "click", () => { engine.reset(); });
 
@@ -1908,6 +1925,9 @@ body { display: flex; flex-direction: column; }
                 if (autoSpeed) autoSpeed.checked = cur.autoSpeed !== false;
                 if (showNames) showNames.checked = !!cur.showKeyNames;
                 if (kbRange) kbRange.value = cur.keyboardRange || "octave";
+                const soundOn = cur.sound !== false;
+                if (soundToggle) soundToggle.checked = soundOn;
+                audio.setEnabled(soundOn);
                 const layout = cur.answerLayout || "buttons";
                 document.querySelectorAll('input[name="answer-layout"]').forEach((r) => {
                     r.checked = (r.value === layout);
@@ -1980,9 +2000,12 @@ body { display: flex; flex-direction: column; }
             const g = ev.guess;
             const pitchGuess = g && typeof g === "object" && Number.isFinite(g.midi);
             if (ev.kind === "hit") {
+                audio.playNote(ev.note.midi);
                 if (pitchGuess) flashKeyByMidi(g.midi, "hit");
                 else flashButton(ev.note.solfege, "hit");
             } else if (ev.kind === "miss") {
+                audio.playError();
+                audio.playNote(ev.note.midi, { delay: 0.2, gain: 0.7 });   // then hear the right one
                 if (pitchGuess) {
                     if (g.octaveAware) flashKeyByMidi(ev.note.midi, "miss");
                     else flashKeyByPc(ev.note.midi, "miss");   // any matching key was OK
@@ -1992,6 +2015,8 @@ body { display: flex; flex-direction: column; }
                     if (g) flashButton(g, "miss");
                 }
             } else if (ev.kind === "expired") {
+                audio.playError();
+                audio.playNote(ev.note.midi, { delay: 0.2, gain: 0.6 });
                 if (uiState.answerLayout === "piano") {
                     if (pianoIsOctaveAware()) flashKeyByMidi(ev.note.midi, "miss");
                     else flashKeyByPc(ev.note.midi, "miss");

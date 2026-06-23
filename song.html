@@ -417,6 +417,11 @@ body { display: flex; flex-direction: column; }
             <p class="study-hint">Off: the scroll stays at the speed you set above.</p>
         </fieldset>
         <fieldset>
+            <legend>Sound</legend>
+            <label class="field-check"><input type="checkbox" id="sound-toggle" checked> Play note sounds</label>
+            <p class="study-hint">Hear each note's pitch as you play the melody (and a buzz on a miss).</p>
+        </fieldset>
+        <fieldset>
             <legend>Game</legend>
             <button id="btn-start" type="button">Play</button>
             <button id="btn-pause" type="button">Pause</button>
@@ -430,6 +435,7 @@ body { display: flex; flex-direction: column; }
 
     <script src="shared/music.js"></script>
     <script src="shared/songs.js"></script>
+    <script src="shared/audio.js"></script>
     <script>
 /*
  * Solfege Trainer — Song mode. Standalone single-file build.
@@ -452,7 +458,7 @@ body { display: flex; flex-direction: column; }
         const SETTINGS_KEY = "solfege.settings.v1";
         const DEFAULTS = Object.freeze({
             clef: "treble", answerLayout: "buttons", notation: "solfege", speed: 60, autoSpeed: true,
-            showKeyNames: false, song: "vapor-trail", showLyrics: false,
+            showKeyNames: false, song: "vapor-trail", showLyrics: false, sound: true,
         });
         let current = null;
 
@@ -472,6 +478,7 @@ body { display: flex; flex-direction: column; }
                 if (Number.isFinite(sp)) out.speed = Math.min(250, Math.max(40, sp));
                 if (typeof raw.autoSpeed === "boolean") out.autoSpeed = raw.autoSpeed;
                 if (typeof raw.showKeyNames === "boolean") out.showKeyNames = raw.showKeyNames;
+                if (typeof raw.sound === "boolean") out.sound = raw.sound;
                 if (typeof raw.song === "string" && raw.song) out.song = raw.song;
                 out.showLyrics = !!raw.showLyrics;
             }
@@ -1202,6 +1209,8 @@ body { display: flex; flex-direction: column; }
     // ui module (HUD, buttons, settings panel, pause overlay)
     // ========================================================================
     const ui = (function () {
+        const audio = (typeof window !== "undefined" && window.Solfege && window.Solfege.audio)
+            || { playNote() {}, playChord() {}, playError() {}, setEnabled() {}, unlock() {} };
         const KEY_MAP = {
             "1": "DO", "2": "RE", "3": "MI", "4": "FA", "5": "SOL", "6": "LA", "7": "SI",
             "d": "DO", "r": "RE", "m": "MI", "f": "FA", "g": "SOL", "l": "LA", "t": "SI",
@@ -1544,6 +1553,14 @@ body { display: flex; flex-direction: column; }
                     if (kb) kb.classList.toggle("show-names", showNames.checked);
                 });
             }
+            const soundToggle = $("#sound-toggle");
+            if (soundToggle) {
+                on(soundToggle, "change", () => {
+                    settings.update({ sound: soundToggle.checked });
+                    audio.setEnabled(soundToggle.checked);
+                    if (soundToggle.checked) audio.unlock();
+                });
+            }
 
             // Lyrics toggle
             const lyricsEl = $("#show-lyrics");
@@ -1574,7 +1591,7 @@ body { display: flex; flex-direction: column; }
                 });
             }
 
-            on($("#btn-start"), "click", () => { engine.start(); setOverlay(true); });
+            on($("#btn-start"), "click", () => { audio.unlock(); engine.start(); setOverlay(true); });
             on($("#btn-pause"), "click", () => { engine.pause(); setOverlay(false); });
             on($("#btn-reset"), "click", () => { engine.reset(); });
 
@@ -1595,6 +1612,9 @@ body { display: flex; flex-direction: column; }
                 if (speedInput && cur.speed) speedInput.value = String(cur.speed);
                 if (autoSpeed) autoSpeed.checked = cur.autoSpeed !== false;
                 if (showNames) showNames.checked = !!cur.showKeyNames;
+                const soundOn = cur.sound !== false;
+                if (soundToggle) soundToggle.checked = soundOn;
+                audio.setEnabled(soundOn);
                 const layout = cur.answerLayout || "buttons";
                 document.querySelectorAll('input[name="answer-layout"]').forEach((r) => {
                     r.checked = (r.value === layout);
@@ -1664,9 +1684,12 @@ body { display: flex; flex-direction: column; }
             const g = ev.guess;
             const pitchGuess = g && typeof g === "object" && Number.isFinite(g.midi);
             if (ev.kind === "hit") {
+                audio.playNote(ev.note.midi);
                 if (pitchGuess) flashKeyByMidi(g.midi, "hit");
                 else flashButton(ev.note.solfege, "hit");
             } else if (ev.kind === "miss") {
+                audio.playError();
+                audio.playNote(ev.note.midi, { delay: 0.2, gain: 0.7 });
                 if (pitchGuess) {
                     if (g.octaveAware) flashKeyByMidi(ev.note.midi, "miss");
                     else flashKeyByPc(ev.note.midi, "miss");
@@ -1676,6 +1699,8 @@ body { display: flex; flex-direction: column; }
                     if (g) flashButton(g, "miss");
                 }
             } else if (ev.kind === "expired") {
+                audio.playError();
+                audio.playNote(ev.note.midi, { delay: 0.2, gain: 0.6 });
                 if (uiState.answerLayout === "piano") {
                     if (pianoIsOctaveAware()) flashKeyByMidi(ev.note.midi, "miss");
                     else flashKeyByPc(ev.note.midi, "miss");
