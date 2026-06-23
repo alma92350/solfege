@@ -173,6 +173,10 @@ body { display: flex; flex-direction: column; }
 .piano-key.white:last-of-type { border-right: none; }
 .piano-key.white .piano-label { font-size: 1rem; font-weight: 700; letter-spacing: 0.04em; }
 .piano-key.white .piano-sub   { font-size: 0.7rem; color: #777; margin-bottom: 2px; font-weight: 500; }
+/* Names are hidden by default (blank keys, like a real piano); a setting shows them. */
+.piano-key .piano-label, .piano-key .piano-sub { display: none; }
+.piano-keyboard.show-names .piano-key .piano-label,
+.piano-keyboard.show-names .piano-key .piano-sub { display: block; }
 .piano-key.white:hover { background: #ebe5d2; }
 .piano-key.white.pressed { background: #d9d2bc; transform: translateY(1px); }
 .piano-key.white.selected { background: #ffe2a6; box-shadow: inset 0 0 0 2px var(--accent-hot); }
@@ -388,6 +392,7 @@ body { display: flex; flex-direction: column; }
             <legend>Answer Layout</legend>
             <label><input type="radio" name="answer-layout" value="buttons" checked> Buttons</label>
             <label><input type="radio" name="answer-layout" value="piano"> Piano Keyboard</label>
+            <label class="field-check"><input type="checkbox" id="show-key-names"> Show note names on keys</label>
         </fieldset>
         <fieldset>
             <legend>Speed</legend>
@@ -476,6 +481,7 @@ body { display: flex; flex-direction: column; }
         const DEFAULTS = Object.freeze({
             element: "notes", length: 3, clef: "treble", startTier: 1,
             display: "sequence", answerLayout: "buttons", autoSpeed: true, flashSpeed: 850,
+            showKeyNames: false,
             noteNames: SOLFEGE_ORDER.slice(),
             chordQualities: ["maj", "min", "dim"], chordInversions: [0],
         });
@@ -491,6 +497,7 @@ body { display: flex; flex-direction: column; }
                 if (raw.clef === "treble" || raw.clef === "bass") out.clef = raw.clef;
                 if (raw.display === "sequence" || raw.display === "together") out.display = raw.display;
                 if (raw.answerLayout === "buttons" || raw.answerLayout === "piano") out.answerLayout = raw.answerLayout;
+                if (typeof raw.showKeyNames === "boolean") out.showKeyNames = raw.showKeyNames;
                 if (typeof raw.autoSpeed === "boolean") out.autoSpeed = raw.autoSpeed;
                 const fs = parseInt(raw.flashSpeed, 10);
                 if (Number.isFinite(fs)) out.flashSpeed = Math.min(1000, Math.max(260, fs));
@@ -1344,6 +1351,10 @@ body { display: flex; flex-direction: column; }
             document.querySelectorAll('input[name="clef"]').forEach(r => { r.checked = r.value === s.clef; });
             document.querySelectorAll('input[name="display"]').forEach(r => { r.checked = r.value === s.display; });
             document.querySelectorAll('input[name="answer-layout"]').forEach(r => { r.checked = r.value === (s.answerLayout || "buttons"); });
+            const showNames = $("#show-key-names");
+            if (showNames) showNames.checked = !!s.showKeyNames;
+            const kbEl = document.getElementById("piano-keyboard");
+            if (kbEl) kbEl.classList.toggle("show-names", !!s.showKeyNames);
             const autoSp = $("#auto-speed");
             if (autoSp) autoSp.checked = s.autoSpeed !== false;
             const flashSp = $("#flash-speed"), flashOut = $("#flash-speed-output");
@@ -1467,6 +1478,12 @@ body { display: flex; flex-direction: column; }
             document.querySelectorAll('input[name="display"]').forEach(r => on(r, "change", () => { if (r.checked) { settings.update({ display: r.value }); reconfigure(); } }));
             // Layout only swaps the visible input — no need to reset the game.
             document.querySelectorAll('input[name="answer-layout"]').forEach(r => on(r, "change", () => { if (r.checked) { settings.update({ answerLayout: r.value }); setMode(settings.get().element); } }));
+            const showKeyNames = $("#show-key-names");
+            if (showKeyNames) on(showKeyNames, "change", () => {
+                settings.update({ showKeyNames: showKeyNames.checked });
+                const kb = document.getElementById("piano-keyboard");
+                if (kb) kb.classList.toggle("show-names", showKeyNames.checked);
+            });
 
             // Adaptive-speed toggle + manual flash-time slider (no game reset).
             const autoSpeed = $("#auto-speed");
