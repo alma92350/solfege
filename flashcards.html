@@ -248,6 +248,18 @@ body { display: flex; flex-direction: column; }
 .note-stem { stroke: var(--staff-ink); stroke-width: 1.6; }
 .note-accidental { fill: var(--staff-ink); font-family: serif; font-size: 22px; }
 .staff-notes .note { transition: opacity 120ms ease; }
+/* Each flashed note "pops" in, so consecutive identical notes (G G) read as two
+   separate flashes rather than one note that never left. */
+@keyframes note-pop {
+    0%   { opacity: 0; transform: scale(0.55); }
+    55%  { opacity: 1; transform: scale(1.14); }
+    100% { opacity: 1; transform: scale(1); }
+}
+.staff-notes .note.is-flash {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: note-pop 190ms ease-out;
+}
 
 .pause-overlay {
     position: absolute; inset: 0;
@@ -838,9 +850,13 @@ body { display: flex; flex-direction: column; }
             const list = state.current;
             if (!list || !list.length) return;
             if (list.length === 1) {
+                // Position on an outer group (translate) and animate the inner note
+                // group (scale/opacity), so the "pop" can't fight the positioning.
+                const wrap = el("g", { transform: "translate(" + state.centerX + " 0)" });
                 const g = makeEl(list[0]);
-                g.setAttribute("transform", "translate(" + state.centerX + " 0)");
-                state.notesLayer.appendChild(g);
+                g.setAttribute("class", "note is-flash");
+                wrap.appendChild(g);
+                state.notesLayer.appendChild(wrap);
                 return;
             }
             // "All at once" mode: spread the elements evenly across the staff,
